@@ -53,10 +53,11 @@ export function Flag({ flag, onCardPlace, selected }: FlagProps) {
           </div>
           {flag.winner && (
             <div className={`
-              absolute -bottom-2 left-1/2 transform -translate-x-1/2
-              w-3 h-3 rotate-45
-              ${flag.winner === 'player' ? 'bg-green-500' : 'bg-red-500'}
-            `} />
+              absolute ${flag.winner === 'player' ? '-bottom-2' : '-top-2'}
+              left-1/2 transform -translate-x-1/2
+              w-3 h-3
+              ${flag.winner === 'player' ? 'rotate-45 bg-green-500' : 'rotate-[225deg] bg-red-500'}
+            `}  />
           )}
         </div>
         

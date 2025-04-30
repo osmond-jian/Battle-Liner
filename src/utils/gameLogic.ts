@@ -44,7 +44,6 @@ function isValidFormation(formation: Formation): boolean {
 
 function calculateFormationStrength(formation: Formation): number {
   if (formation.cards.length < 3) return 0;
-  
   // Sort by value for straight detection
   const sortedCards = [...formation.cards].sort((a, b) => a.value - b.value);
   
@@ -57,13 +56,17 @@ function calculateFormationStrength(formation: Formation): number {
     return card.value === sortedCards[i - 1].value + 1;
   });
 
+  //Check for three-of-a-kind
+  const isThreeOfKind = sortedCards.every(card => card.value === formation.cards[0].value)
+
   // Calculate base sum
   const sum = formation.cards.reduce((acc, card) => acc + card.value, 0);
 
   // Apply multipliers for special combinations
-  if (isFlush && isStraight) return sum * 4; // Straight flush
-  if (isFlush) return sum * 2; // Flush
-  if (isStraight) return sum * 2; // Straight
+  if (isFlush && isStraight) return sum * 10000; // Straight flush
+  if (isThreeOfKind) return sum * 1000
+  if (isFlush) return sum * 100; // Flush
+  if (isStraight) return sum * 10; // Straight
   
   return sum;
 }
