@@ -38,9 +38,47 @@ export function createFlags(): Flag[] {
   }));
 }
 
-function isValidFormation(formation: Formation): boolean {
-  return formation.cards.length <= 3;
+function getCombinations(cards: Card[], size: number): Card[][] {
+  const results: Card[][] = [];
+  const recurse = (combo: Card[], index: number) => {
+    if (combo.length === size) {
+      results.push(combo);
+      return;
+    }
+    for (let i = index; i < cards.length; i++) {
+      recurse([...combo, cards[i]], i + 1);
+    }
+  };
+  recurse([], 0);
+  return results;
 }
+
+function opponentCannotWin(
+  completedFormation: Formation,
+  opponentFormation: Formation,
+  availableCards: Card[]
+): boolean {
+  const completedStrength = calculateFormationStrength(completedFormation);
+  const needed = 3 - opponentFormation.cards.length;
+
+  if (needed <= 0) return false; // Already has 3 cards — handled by normal logic
+
+  const allOptions = getCombinations(availableCards, needed);
+
+  for (const combo of allOptions) {
+    const hypothetical = {
+      cards: [...opponentFormation.cards, ...combo],
+      owner: 'opponent' as const,
+    };
+    if (calculateFormationStrength(hypothetical) > completedStrength) {
+      return false; // Can still win
+    }
+  }
+
+  return true; // No combo can win
+}
+
+
 
 function calculateFormationStrength(formation: Formation): number {
   if (formation.cards.length < 3) return 0;
@@ -71,17 +109,39 @@ function calculateFormationStrength(formation: Formation): number {
   return sum;
 }
 
-export function checkWinner(flag: Flag): 'player' | 'opponent' | null {
+export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] = []): 'player' | 'opponent' | null {
   if (flag.winner) return flag.winner;
-  
+
+  const playerCards = flag.formation.player.cards;
+  const opponentCards = flag.formation.opponent.cards;
+
   const playerStrength = calculateFormationStrength(flag.formation.player);
   const opponentStrength = calculateFormationStrength(flag.formation.opponent);
-  
-  if (flag.formation.player.cards.length === 3 && flag.formation.opponent.cards.length === 3) {
+
+  // Normal case: both sides have full formations
+  if (playerCards.length === 3 && opponentCards.length === 3) {
     if (playerStrength > opponentStrength) return 'player';
     if (opponentStrength > playerStrength) return 'opponent';
   }
-  
+
+  // Early win check: player has full, opponent can't win
+  if (
+    playerCards.length === 3 &&
+    opponentCards.length < 3 &&
+    opponentCannotWin(flag.formation.player, flag.formation.opponent, [...deck, ...opponentHand])
+  ) {
+    return 'player';
+  }
+
+  // Early win check: opponent has full, player can't win
+  if (
+    opponentCards.length === 3 &&
+    playerCards.length < 3 &&
+    opponentCannotWin(flag.formation.opponent, flag.formation.player, deck) // we don't see opponent's hand
+  ) {
+    return 'opponent';
+  }
+
   return null;
 }
 

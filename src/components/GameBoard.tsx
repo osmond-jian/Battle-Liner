@@ -3,6 +3,10 @@ import { Card as CardType, Flag as FlagType, GameState } from '../types/game';
 import { Flag } from './Flag';
 import { Card } from './Card';
 import { Deck } from './Deck';
+import { DeckStats } from './DeckStats'
+import { CardBack } from './CardBack';
+import { RulesPopup } from './RulesPopup'
+import { FormationGuide } from './FormationGuide';
 import { 
   createDeck, 
   createFlags, 
@@ -20,6 +24,9 @@ export function GameBoard() {
   const [selectedCard, setSelectedCard] = useState<CardType | null>(null);
   const [selectedFlag, setSelectedFlag] = useState<number | null>(null);
   const [gameState, setGameState] = useState<GameState>('playing');
+  const [showGuide, setShowGuide] = useState(false);
+  const [showRules, setShowRules] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const initializeGame = () => {
     const newDeck = createDeck();
@@ -68,7 +75,8 @@ export function GameBoard() {
     setSelectedFlag(null);
 
     // Check if this flag is won
-    const flagWinner = checkWinner(flag);
+    const flagWinner = checkWinner(flag, deck, opponentHand);
+    console.log("Opponent possible cards for elimination:", [...deck, ...opponentHand]);
     if (flagWinner) {
       flag.winner = flagWinner;
     }
@@ -89,7 +97,9 @@ export function GameBoard() {
       newFlags[oppFlagIndex].formation.opponent.cards.push(oppCard);
       setOpponentHand(prev => prev.filter(card => card.id !== oppCard.id));
       
-      const oppFlagWinner = checkWinner(newFlags[oppFlagIndex]);
+      const oppFlagWinner = checkWinner(newFlags[oppFlagIndex], deck, opponentHand);
+      console.log("Opponent possible cards for elimination:", [...deck, ...opponentHand]);
+
       if (oppFlagWinner) {
         newFlags[oppFlagIndex].winner = oppFlagWinner;
       }
@@ -129,7 +139,7 @@ export function GameBoard() {
           </button>
         </div>
       </nav>
-
+  
       {/* Game Over Message */}
       {gameState !== 'playing' && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -138,8 +148,8 @@ export function GameBoard() {
               {gameState === 'playerWon' ? 'Congratulations!' : 'Defeat!'}
             </h2>
             <p className="text-xl mb-4 text-gray-300">
-              {gameState === 'playerWon' 
-                ? 'You have won the battle!' 
+              {gameState === 'playerWon'
+                ? 'You have won the battle!'
                 : 'The opponent has won the battle!'}
             </p>
             <button
@@ -157,57 +167,96 @@ export function GameBoard() {
           </div>
         </div>
       )}
+  
+      {/* Formation Guide Modal */}
+      {showGuide && <FormationGuide onClose={() => setShowGuide(false)} />}
+      {/* Show Rules Modal */}
+      {showRules && <RulesPopup onClose={() => setShowRules(false)} />}
+      {/* Show Deck Stats Modal */}
+      {showStats && (
+        <DeckStats
+          onClose={() => setShowStats(false)}
+          deck={deck}
+          playerHand={playerHand}
+          opponentHand={opponentHand}
+          flags={flags}
+        />
+      )}
 
-      {/* Game Board */}
-      <div className="max-w-7xl mx-auto">
-        {/* Opponent's Hand (face down) */}
-        <div className="flex justify-center gap-2 mb-8">
+
+  
+      {/* Game Layout */}
+      <div className="max-w-7xl mx-auto flex justify-between gap-6">
+
+        {/* Center: Main Game Area */}
+        <div className="flex-1 space-y-8">
+        {/* Opponent's Hand */}
+        <div className="flex justify-center gap-2">
           {opponentHand.map((_, i) => (
-            <div
-              key={i}
-              className="w-20 h-32 bg-gray-800 rounded-lg shadow-md border-2 border-gray-700 relative overflow-hidden"
-            >
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-gray-700 rounded-full" />
-              </div>
-              <div className="absolute inset-0">
-                <div className="w-full h-full bg-gradient-to-br from-gray-700/30 to-transparent" />
-              </div>
-            </div>
+            <CardBack key={i} />
           ))}
         </div>
 
-        {/* Deck and Flags */}
-        <div className="flex justify-center gap-8 mb-8">
-          <Deck cardsRemaining={deck.length} totalCards={TOTAL_CARDS} />
-          <div className="flex gap-4">
-            {flags.map((flag, index) => (
-              <Flag
-                key={flag.id}
-                flag={flag}
-                selected={selectedFlag === index}
-                onCardPlace={() => {
-                  if (selectedCard) {
-                    playCard(index);
-                  } else {
-                    setSelectedFlag(index);
-                  }
-                }}
+          {/* Flags and Deck aligned side-by-side */}
+          <div className="flex flex-row items-center justify-center gap-6">
+            {/* Deck on the left */}
+            <div className="w-24 flex justify-center">
+              <Deck cardsRemaining={deck.length} totalCards={TOTAL_CARDS} />
+            </div>
+
+            {/* Flags in the middle */}
+            <div className="flex gap-4">
+              {flags.map((flag, index) => (
+                <Flag
+                  key={flag.id}
+                  flag={flag}
+                  selected={selectedFlag === index}
+                  onCardPlace={() => {
+                    if (selectedCard) {
+                      playCard(index);
+                    } else {
+                      setSelectedFlag(prev => (prev === index ? null : index));
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Player's Hand */}
+          <div className="flex justify-center gap-2">
+            {playerHand.map((card) => (
+              <Card
+                key={card.id}
+                card={card}
+                selected={selectedCard?.id === card.id}
+                onClick={() => handleCardClick(card)}
               />
             ))}
           </div>
         </div>
 
-        {/* Player's Hand */}
-        <div className="flex justify-center gap-2">
-          {playerHand.map(card => (
-            <Card
-              key={card.id}
-              card={card}
-              selected={selectedCard?.id === card.id}
-              onClick={() => handleCardClick(card)}
-            />
-          ))}
+        {/* Right-Side Tool Menu */}
+        <div className="w-40 flex flex-col items-center gap-4 pt-2">
+        <button
+            onClick={() => setShowRules(true)}
+            className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full"
+          >
+            Rules
+          </button>
+          <button
+            onClick={() => setShowGuide(true)}
+            className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full"
+          >
+            Formations
+          </button>
+
+          <button
+            onClick={() => setShowStats(true)}
+            className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full"
+          >
+            Deck Stats
+          </button>
         </div>
       </div>
     </div>

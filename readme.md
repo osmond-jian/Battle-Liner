@@ -32,9 +32,7 @@ yarn run dev
 The project is still a work in progress. Here are some major tasks that still need to be done:
 
 1. Add multiplayer functionalities - allow players to join lobbies and host games.
-2. Add some UI about the rules and what the appropriate card pairings are (formations)
-3. Add tactics cards as a option
-4. Improve the look of the cards
-5. Fix up the logic behind checking formations - not all formations are included yet.
-6. Allow player to "prove" that the flag is won - something that is not done currently. Formations currently only scored when the flag has 3 cards on each side.
-7. Add a user login platform.
+2. Add tactics cards as a option
+3. Improve the look of the cards
+4. Allow player to "prove" that the flag is won - This is currently done automatically. Maybe think about making it manual (evaluate flag by clicking on it?)
+5. Add a user login platform.
