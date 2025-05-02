@@ -43,7 +43,7 @@ export function GameBoard() {
   const [animatingOppCard, setAnimatingOppCard] = useState<null | {
     card: CardType;
     flagIndex: number;
-    drawnCard: CardType;
+    drawnCard: CardType | null;
     updatedDeck: CardType[];
   }>(null);
   const [animatingOppDraw, setAnimatingOppDraw] = useState<CardType | null>(null);
@@ -69,28 +69,6 @@ export function GameBoard() {
   }, []);
 
   const { getMove } = useOpponentAI();
-
-  const drawCard = (isPlayer: boolean) => {
-    if (deck.length === 0) return;
-    const [newCard, ...remainingDeck] = deck;
-    setDeck(remainingDeck);
-
-    if (isPlayer) {
-      const deckEl = document.getElementById('deck');
-      const handEl = document.getElementById('hand');
-      if (deckEl && handEl) {
-        const d = deckEl.getBoundingClientRect();
-        const h = handEl.getBoundingClientRect();
-        setPlayerFlyFrom({ x: d.left + window.scrollX, y: d.top + window.scrollY });
-        setPlayerFlyTo({ x: h.left + window.scrollX + h.width / 2 - 40, y: h.top + window.scrollY });
-        setFlyingCard(newCard);
-      } else {
-        setPlayerHand(prev => [...prev, newCard]);
-      }
-    } else {
-      setOpponentHand(prev => [...prev, newCard]);
-    }
-  };
 
   const playCard = (flagIndex: number) => {
     if (!selectedCard) return;
@@ -135,9 +113,36 @@ export function GameBoard() {
       }
     }
   };
+
+  const handleOpponentTurn = async (currentDeck: CardType[]) => {
+    const move = getMove(opponentHand, flags, currentDeck);
+    if (!move) return;
+  
+    const { card, flagIndex } = move;
+    const [drawnCard, ...remainingDeck] = currentDeck;
+  
+    // Set up animation data — but do NOT mutate any game state yet
+    const cardEl = document.getElementById(`opponent-card-${card.id}`);
+    const flagEl = document.getElementById(`flag-${flagIndex}`);
+    if (!cardEl || !flagEl) return;
+  
+    const from = cardEl.getBoundingClientRect();
+    const to = flagEl.getBoundingClientRect();
+  
+    setOpponentPlayFrom({ x: from.left + window.scrollX, y: from.top + window.scrollY });
+    setOpponentPlayTo({ x: to.left + window.scrollX, y: to.top + window.scrollY });
+  
+    // Start the animation — CardFly will handle the state change when it finishes
+    setAnimatingOppCard({
+      card,
+      flagIndex,
+      drawnCard: drawnCard ?? null,
+      updatedDeck: remainingDeck,
+    });
+  };
   
 
-  const executePlayCard = (flagIndex: number, card: CardType) => {
+  const executePlayCard = async (flagIndex: number, card: CardType) => {
     const newFlags = [...flags];
     const flag = newFlags[flagIndex];
     if (flag.formation.player.cards.length >= 3 || flag.winner) return;
@@ -151,53 +156,24 @@ export function GameBoard() {
     if (winner) flag.winner = winner;
   
     const gameWinner = checkGameOver(newFlags);
+    console.log("Checking win with flag winners:", newFlags.map(f => f.winner));
     if (gameWinner === 'player') {
       setGameState('playerWon');
       return;
     }
   
-    // 2. Prepare opponent move
-    const [oppDrawCard, ...afterOpponentDraw] = deck;
-    const move = getMove(opponentHand, newFlags, deck);
-    if (!move) return;
-  
-    const moveCard = move.card;
-    const moveFlag = move.flagIndex;
-  
-    // 3. Animate opponent card play
-    requestAnimationFrame(() => {
-      const cardEl = document.getElementById(`opponent-card-${moveCard.id}`);
-      const flagEl = document.getElementById(`flag-${moveFlag}`);
-  
-      if (cardEl && flagEl) {
-        const c = cardEl.getBoundingClientRect();
-        const f = flagEl.getBoundingClientRect();
-        setOpponentPlayFrom({ x: c.left + window.scrollX, y: c.top + window.scrollY });
-        setOpponentPlayTo({ x: f.left + window.scrollX, y: f.top + window.scrollY });
-      } else {
-        // Fallback so animation still runs
-        setOpponentPlayFrom({ x: 0, y: 0 });
-        setOpponentPlayTo({ x: 0, y: 0 });
-      }
-  
-      setAnimatingOppCard({
-        card: moveCard,
-        flagIndex: moveFlag,
-        drawnCard: oppDrawCard ?? null,
-        updatedDeck: afterOpponentDraw,
-      });
-    });
-  
-    // 4. Player draws
-    const [playerCard, ...finalDeck] = afterOpponentDraw;
+    // ✅ Player draw first
+    const [playerCard, ...deckAfterPlayerDraw] = deck;
     if (playerCard) {
-      setTimeout(() => {
+      await new Promise(resolve => {
         animatedDrawCard(true, playerCard);
-        setDeck(finalDeck);
-      }, 600);
-    } else {
-      setDeck(afterOpponentDraw);
+        setTimeout(resolve, 600); 
+      });
     }
+    setDeck(deckAfterPlayerDraw);
+  
+    // ✅ Then pass updated deck to opponent
+    await handleOpponentTurn(deckAfterPlayerDraw);
   };
   
   
@@ -251,14 +227,17 @@ export function GameBoard() {
       )}
 
       {animatingOppDraw && (
-        <CardFly card={animatingOppDraw} from={opponentFlyFrom} to={opponentFlyTo} onComplete={() => {
-          setOpponentHand(prev => {
-            // Avoid adding if it's already in hand
-            if (prev.find(c => c.id === animatingOppDraw.id)) return prev;
-            return [...prev, animatingOppDraw];
-          });          
-          setAnimatingOppDraw(null);
-        }} />
+        <CardFly
+          card={animatingOppDraw}
+          from={opponentFlyFrom}
+          to={opponentFlyTo}
+          onComplete={() => {
+            if (animatingOppDraw) {
+              setOpponentHand(prev => [...prev, animatingOppDraw]);
+            }
+            setAnimatingOppDraw(null);
+          }}
+        />
       )}
 
       {animatingPlay && (
@@ -274,25 +253,23 @@ export function GameBoard() {
           from={opponentPlayFrom}
           to={opponentPlayTo}
           onComplete={() => {
-            const { card, flagIndex, drawnCard, updatedDeck } = animatingOppCard;
+            const { card, flagIndex, drawnCard, updatedDeck } = animatingOppCard!;
 
-            // 1. Play card
+            // Now safely mutate state AFTER animation finishes
             const newFlags = [...flags];
             newFlags[flagIndex].formation.opponent.cards.push(card);
-            setOpponentHand(prev => prev.filter(c => c.id !== card.id));
             setFlags(newFlags);
+            setOpponentHand(prev => prev.filter(c => c.id !== card.id));
 
-            // 2. Update game state
             const winner = checkWinner(newFlags[flagIndex], updatedDeck, opponentHand);
             if (winner) newFlags[flagIndex].winner = winner;
 
             const gameWinner = checkGameOver(newFlags);
             if (gameWinner === 'opponent') setGameState('opponentWon');
 
-            setAnimatingOppCard(null);
             setDeck(updatedDeck);
+            setAnimatingOppCard(null);
 
-            // 3. Animate draw AFTER play (and use new card)
             if (drawnCard) {
               setTimeout(() => {
                 animatedDrawCard(false, drawnCard);
@@ -310,9 +287,16 @@ export function GameBoard() {
       <div className="max-w-7xl mx-auto flex justify-between gap-6">
         <div className="flex-1 space-y-8">
           <div id="opponent-hand" className="flex justify-center gap-2">
-            {opponentHand.map(card => (
-              <CardBack key={card.id} id={`opponent-card-${card.id}`} />
-            ))}
+          {opponentHand.map(card => {
+            const isBeingPlayed = animatingOppCard?.card.id === card.id;
+            return (
+              <CardBack
+                key={card.id}
+                id={`opponent-card-${card.id}`}
+                style={isBeingPlayed ? { opacity: 0.01 } : {}}
+              />
+            );
+          })}
           </div>
           <div className="flex items-center justify-center gap-6">
             <div id="deck" className="w-24 flex justify-center">

@@ -22,11 +22,16 @@ const colorClasses: Record<CardColor, string> = {
 };
 
 export function DeckStats({ onClose, deck, playerHand, opponentHand, flags }: Props) {
-  const availableCards: Card[] = [...deck, ...opponentHand];
-
-  const isCardAvailable = (color: CardColor, value: CardValue) => {
-    return availableCards.some(card => card.color === color && card.value === value);
-  };
+    const knownCards = [
+        ...playerHand,
+        ...flags.flatMap(f => [...f.formation.player.cards, ...f.formation.opponent.cards]),
+      ];
+      
+      const isCardKnown = (color: CardColor, value: CardValue) =>
+        knownCards.some(card => card.color === color && card.value === value);
+      
+      const isCardAvailable = (color: CardColor, value: CardValue) => !isCardKnown(color, value);
+      
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
