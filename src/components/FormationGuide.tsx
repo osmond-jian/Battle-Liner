@@ -1,5 +1,3 @@
-// components/FormationGuide.tsx
-import React from 'react';
 import { Card } from './Card';
 import { Card as CardType, CardColor, CardValue } from '../types/game';
 

@@ -4,15 +4,17 @@ interface CardBackProps {
   width?: string;
   height?: string;
   children?: React.ReactNode; // For centered overlay like "46"
+  id?:string;
 }
 
 export function CardBack({
   width = 'w-20',
   height = 'h-32',
   children,
+  id,
 }: CardBackProps) {
   return (
-    <div className={`${width} ${height} bg-gray-800 rounded-lg shadow-md border-2 border-gray-700 relative overflow-hidden`}>
+    <div className={`${width} ${height} bg-gray-800 rounded-lg shadow-md border-2 border-gray-700 relative overflow-hidden hover:scale-105 transition-transform duration-200`}>
     {/* Always render the circle in the background */}
     <div className="absolute inset-0 flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-gray-700 rounded-full" />

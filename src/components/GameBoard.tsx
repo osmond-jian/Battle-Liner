@@ -1,18 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card as CardType, Flag as FlagType, GameState } from '../types/game';
 import { Flag } from './Flag';
 import { Card } from './Card';
 import { Deck } from './Deck';
-import { DeckStats } from './DeckStats'
+import { DeckStats } from './DeckStats';
 import { CardBack } from './CardBack';
-import { RulesPopup } from './RulesPopup'
+import { RulesPopup } from './RulesPopup';
 import { FormationGuide } from './FormationGuide';
-import { 
-  createDeck, 
-  createFlags, 
-  checkWinner, 
+import { CardFly } from './CardFly';
+import { useOpponentAI } from '../hooks/useOpponentAI';
+import {
+  createDeck,
+  createFlags,
+  checkWinner,
   checkGameOver,
-  makeOpponentMove,
   TOTAL_CARDS
 } from '../utils/gameLogic';
 
@@ -27,6 +28,26 @@ export function GameBoard() {
   const [showGuide, setShowGuide] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showStats, setShowStats] = useState(false);
+
+  const [flyingCard, setFlyingCard] = useState<CardType | null>(null);
+  const [playerFlyFrom, setPlayerFlyFrom] = useState({ x: 0, y: 0 });
+  const [playerFlyTo, setPlayerFlyTo] = useState({ x: 0, y: 0 });
+  
+  const [opponentFlyFrom, setOpponentFlyFrom] = useState({ x: 0, y: 0 });
+  const [opponentFlyTo, setOpponentFlyTo] = useState({ x: 0, y: 0 });
+
+  const [opponentPlayFrom, setOpponentPlayFrom] = useState({ x: 0, y: 0 });
+  const [opponentPlayTo, setOpponentPlayTo] = useState({ x: 0, y: 0 });
+  
+  const [animatingPlay, setAnimatingPlay] = useState<null | { card: CardType; flagIndex: number }>(null);
+  const [animatingOppCard, setAnimatingOppCard] = useState<null | {
+    card: CardType;
+    flagIndex: number;
+    drawnCard: CardType;
+    updatedDeck: CardType[];
+  }>(null);
+  const [animatingOppDraw, setAnimatingOppDraw] = useState<CardType | null>(null);
+
 
   const initializeGame = () => {
     const newDeck = createDeck();
@@ -47,87 +68,141 @@ export function GameBoard() {
     initializeGame();
   }, []);
 
+  const { getMove } = useOpponentAI();
+
   const drawCard = (isPlayer: boolean) => {
     if (deck.length === 0) return;
-    
     const [newCard, ...remainingDeck] = deck;
     setDeck(remainingDeck);
-    
+
     if (isPlayer) {
-      setPlayerHand(prev => [...prev, newCard]);
+      const deckEl = document.getElementById('deck');
+      const handEl = document.getElementById('hand');
+      if (deckEl && handEl) {
+        const d = deckEl.getBoundingClientRect();
+        const h = handEl.getBoundingClientRect();
+        setPlayerFlyFrom({ x: d.left + window.scrollX, y: d.top + window.scrollY });
+        setPlayerFlyTo({ x: h.left + window.scrollX + h.width / 2 - 40, y: h.top + window.scrollY });
+        setFlyingCard(newCard);
+      } else {
+        setPlayerHand(prev => [...prev, newCard]);
+      }
     } else {
       setOpponentHand(prev => [...prev, newCard]);
     }
   };
 
   const playCard = (flagIndex: number) => {
-    if (!selectedCard || gameState !== 'playing') return;
+    if (!selectedCard) return;
+    const handEl = document.getElementById(`card-${selectedCard.id}`);
+    const flagEl = document.getElementById(`flag-${flagIndex}`);
 
+    if (handEl && flagEl) {
+      const h = handEl.getBoundingClientRect();
+      const f = flagEl.getBoundingClientRect();
+      setPlayerFlyFrom({ x: h.left + window.scrollX, y: h.top + window.scrollY });
+      setPlayerFlyTo({ x: f.left + window.scrollX, y: f.top + window.scrollY });
+      setAnimatingPlay({ card: selectedCard, flagIndex });
+      setSelectedCard(null);
+      setSelectedFlag(null);
+    } else {
+      executePlayCard(flagIndex, selectedCard);
+    }
+  };
+
+  const animatedDrawCard = (isPlayer: boolean, card: CardType) => {
+    const deckEl = document.getElementById('deck');
+    const handEl = document.getElementById(isPlayer ? 'hand' : 'opponent-hand');
+  
+    if (deckEl && handEl) {
+      const d = deckEl.getBoundingClientRect();
+      const h = handEl.getBoundingClientRect();
+  
+      if (isPlayer) {
+        setPlayerFlyFrom({ x: d.left + window.scrollX, y: d.top + window.scrollY });
+        setPlayerFlyTo({ x: h.left + window.scrollX + h.width / 2 - 40, y: h.top + window.scrollY });
+        setFlyingCard(card);
+      } else {
+        setOpponentFlyFrom({ x: d.left + window.scrollX, y: d.top + window.scrollY });
+        setOpponentFlyTo({ x: h.left + window.scrollX + h.width / 2 - 30, y: h.top + window.scrollY });
+        setAnimatingOppDraw(card);
+      }
+    } else {
+      if (isPlayer) {
+        setPlayerHand(prev => [...prev, card]);
+      } else {
+        setOpponentHand(prev => [...prev, card]);
+      }
+    }
+  };
+  
+
+  const executePlayCard = (flagIndex: number, card: CardType) => {
     const newFlags = [...flags];
     const flag = newFlags[flagIndex];
-
-    if (flag.winner || flag.formation.player.cards.length >= 3) return;
-
-    // Update player's formation
-    flag.formation.player.cards.push(selectedCard);
-    setPlayerHand(prev => prev.filter(card => card.id !== selectedCard.id));
-    setSelectedCard(null);
-    setSelectedFlag(null);
-
-    // Check if this flag is won
-    const flagWinner = checkWinner(flag, deck, opponentHand);
-    console.log("Opponent possible cards for elimination:", [...deck, ...opponentHand]);
-    if (flagWinner) {
-      flag.winner = flagWinner;
-    }
-
-    // Update flags and check game state
+    if (flag.formation.player.cards.length >= 3 || flag.winner) return;
+  
+    // 1. Player plays
+    flag.formation.player.cards.push(card);
+    setPlayerHand(prev => prev.filter(c => c.id !== card.id));
     setFlags(newFlags);
+  
+    const winner = checkWinner(flag, deck, opponentHand);
+    if (winner) flag.winner = winner;
+  
     const gameWinner = checkGameOver(newFlags);
-    if (gameWinner) {
-      setGameState(gameWinner === 'player' ? 'playerWon' : 'opponentWon');
+    if (gameWinner === 'player') {
+      setGameState('playerWon');
       return;
     }
-
-    // Opponent's turn
-    const opponentMove = makeOpponentMove(newFlags, opponentHand, deck);
-    if (opponentMove) {
-      const { flagIndex: oppFlagIndex, card: oppCard } = opponentMove;
-      
-      newFlags[oppFlagIndex].formation.opponent.cards.push(oppCard);
-      setOpponentHand(prev => prev.filter(card => card.id !== oppCard.id));
-      
-      const oppFlagWinner = checkWinner(newFlags[oppFlagIndex], deck, opponentHand);
-      console.log("Opponent possible cards for elimination:", [...deck, ...opponentHand]);
-
-      if (oppFlagWinner) {
-        newFlags[oppFlagIndex].winner = oppFlagWinner;
+  
+    // 2. Prepare opponent move
+    const [oppDrawCard, ...afterOpponentDraw] = deck;
+    const move = getMove(opponentHand, newFlags, deck);
+    if (!move) return;
+  
+    const moveCard = move.card;
+    const moveFlag = move.flagIndex;
+  
+    // 3. Animate opponent card play
+    requestAnimationFrame(() => {
+      const cardEl = document.getElementById(`opponent-card-${moveCard.id}`);
+      const flagEl = document.getElementById(`flag-${moveFlag}`);
+  
+      if (cardEl && flagEl) {
+        const c = cardEl.getBoundingClientRect();
+        const f = flagEl.getBoundingClientRect();
+        setOpponentPlayFrom({ x: c.left + window.scrollX, y: c.top + window.scrollY });
+        setOpponentPlayTo({ x: f.left + window.scrollX, y: f.top + window.scrollY });
+      } else {
+        // Fallback so animation still runs
+        setOpponentPlayFrom({ x: 0, y: 0 });
+        setOpponentPlayTo({ x: 0, y: 0 });
       }
-      
-      setFlags(newFlags);
-      
-      const finalGameWinner = checkGameOver(newFlags);
-      if (finalGameWinner) {
-        setGameState(finalGameWinner === 'player' ? 'playerWon' : 'opponentWon');
-      }
-    }
-
-    // Draw new cards
-    drawCard(true);
-    drawCard(false);
-  };
-
-  const handleCardClick = (card: CardType) => {
-    if (selectedCard?.id === card.id) {
-      setSelectedCard(null);
+  
+      setAnimatingOppCard({
+        card: moveCard,
+        flagIndex: moveFlag,
+        drawnCard: oppDrawCard ?? null,
+        updatedDeck: afterOpponentDraw,
+      });
+    });
+  
+    // 4. Player draws
+    const [playerCard, ...finalDeck] = afterOpponentDraw;
+    if (playerCard) {
+      setTimeout(() => {
+        animatedDrawCard(true, playerCard);
+        setDeck(finalDeck);
+      }, 600);
     } else {
-      setSelectedCard(card);
+      setDeck(afterOpponentDraw);
     }
   };
-
+  
+  
   return (
     <div className="min-h-screen bg-gray-900 p-4">
-      {/* Navigation */}
       <nav className="bg-gray-800 shadow-lg p-4 mb-8 rounded-lg border border-gray-700">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-white">Battle Line</h1>
@@ -139,122 +214,146 @@ export function GameBoard() {
           </button>
         </div>
       </nav>
-  
-      {/* Game Over Message */}
+
       {gameState !== 'playing' && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 p-8 rounded-lg shadow-xl text-center border border-gray-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60">
+          <div className="bg-gray-800 p-8 rounded-lg shadow-xl border border-gray-700 w-80 text-center relative">
             <h2 className="text-3xl font-bold mb-4 text-white">
-              {gameState === 'playerWon' ? 'Congratulations!' : 'Defeat!'}
+              {gameState === 'playerWon' ? 'Victory!' : 'Defeat!'}
             </h2>
-            <p className="text-xl mb-4 text-gray-300">
-              {gameState === 'playerWon'
-                ? 'You have won the battle!'
-                : 'The opponent has won the battle!'}
+            <p className="text-gray-300 mb-6">
+              {gameState === 'playerWon' ? 'You won the battle!' : 'The opponent has won.'}
             </p>
-            <button
-              onClick={initializeGame}
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              New Game
-            </button>
-            <button
-              onClick={() => setGameState('playing')}
-              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              Close
-            </button>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={initializeGame}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
+              >
+                Play Again
+              </button>
+              <button
+                onClick={() => setGameState('playing')}
+                className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
-  
-      {/* Formation Guide Modal */}
-      {showGuide && <FormationGuide onClose={() => setShowGuide(false)} />}
-      {/* Show Rules Modal */}
-      {showRules && <RulesPopup onClose={() => setShowRules(false)} />}
-      {/* Show Deck Stats Modal */}
-      {showStats && (
-        <DeckStats
-          onClose={() => setShowStats(false)}
-          deck={deck}
-          playerHand={playerHand}
-          opponentHand={opponentHand}
-          flags={flags}
+
+      {/* Card Fly Animations */}
+      {flyingCard && (
+        <CardFly card={flyingCard} from={playerFlyFrom} to={playerFlyTo} onComplete={() => {
+          setPlayerHand(prev => [...prev, flyingCard]);
+          setFlyingCard(null);
+        }} />
+      )}
+
+      {animatingOppDraw && (
+        <CardFly card={animatingOppDraw} from={opponentFlyFrom} to={opponentFlyTo} onComplete={() => {
+          setOpponentHand(prev => {
+            // Avoid adding if it's already in hand
+            if (prev.find(c => c.id === animatingOppDraw.id)) return prev;
+            return [...prev, animatingOppDraw];
+          });          
+          setAnimatingOppDraw(null);
+        }} />
+      )}
+
+      {animatingPlay && (
+        <CardFly card={animatingPlay.card} from={playerFlyFrom} to={playerFlyTo} onComplete={() => {
+          executePlayCard(animatingPlay.flagIndex, animatingPlay.card);
+          setAnimatingPlay(null);
+        }} />
+      )}
+
+      {animatingOppCard && (
+        <CardFly
+          card={animatingOppCard.card}
+          from={opponentPlayFrom}
+          to={opponentPlayTo}
+          onComplete={() => {
+            const { card, flagIndex, drawnCard, updatedDeck } = animatingOppCard;
+
+            // 1. Play card
+            const newFlags = [...flags];
+            newFlags[flagIndex].formation.opponent.cards.push(card);
+            setOpponentHand(prev => prev.filter(c => c.id !== card.id));
+            setFlags(newFlags);
+
+            // 2. Update game state
+            const winner = checkWinner(newFlags[flagIndex], updatedDeck, opponentHand);
+            if (winner) newFlags[flagIndex].winner = winner;
+
+            const gameWinner = checkGameOver(newFlags);
+            if (gameWinner === 'opponent') setGameState('opponentWon');
+
+            setAnimatingOppCard(null);
+            setDeck(updatedDeck);
+
+            // 3. Animate draw AFTER play (and use new card)
+            if (drawnCard) {
+              setTimeout(() => {
+                animatedDrawCard(false, drawnCard);
+              }, 0);
+            }
+          }}
         />
       )}
 
 
-  
-      {/* Game Layout */}
+      {showGuide && <FormationGuide onClose={() => setShowGuide(false)} />}
+      {showRules && <RulesPopup onClose={() => setShowRules(false)} />}
+      {showStats && <DeckStats onClose={() => setShowStats(false)} deck={deck} playerHand={playerHand} opponentHand={opponentHand} flags={flags} />}
+
       <div className="max-w-7xl mx-auto flex justify-between gap-6">
-
-        {/* Center: Main Game Area */}
         <div className="flex-1 space-y-8">
-        {/* Opponent's Hand */}
-        <div className="flex justify-center gap-2">
-          {opponentHand.map((_, i) => (
-            <CardBack key={i} />
-          ))}
-        </div>
-
-          {/* Flags and Deck aligned side-by-side */}
-          <div className="flex flex-row items-center justify-center gap-6">
-            {/* Deck on the left */}
-            <div className="w-24 flex justify-center">
+          <div id="opponent-hand" className="flex justify-center gap-2">
+            {opponentHand.map(card => (
+              <CardBack key={card.id} id={`opponent-card-${card.id}`} />
+            ))}
+          </div>
+          <div className="flex items-center justify-center gap-6">
+            <div id="deck" className="w-24 flex justify-center">
               <Deck cardsRemaining={deck.length} totalCards={TOTAL_CARDS} />
             </div>
-
-            {/* Flags in the middle */}
             <div className="flex gap-4">
-              {flags.map((flag, index) => (
-                <Flag
-                  key={flag.id}
-                  flag={flag}
-                  selected={selectedFlag === index}
-                  onCardPlace={() => {
-                    if (selectedCard) {
-                      playCard(index);
-                    } else {
-                      setSelectedFlag(prev => (prev === index ? null : index));
+              {flags.map((flag, i) => (
+                <div id={`flag-${i}`} key={flag.id}>
+                  <Flag
+                    flag={flag}
+                    selected={selectedFlag === i}
+                    onCardPlace={() =>
+                      selectedCard ? playCard(i) : setSelectedFlag(prev => (prev === i ? null : i))
                     }
-                  }}
-                />
+                  />
+                </div>
               ))}
             </div>
           </div>
-
-          {/* Player's Hand */}
-          <div className="flex justify-center gap-2">
-            {playerHand.map((card) => (
+          <div id="hand" className="flex justify-center gap-2">
+            {playerHand.map(card => (
               <Card
                 key={card.id}
+                id={`card-${card.id}`}
                 card={card}
                 selected={selectedCard?.id === card.id}
-                onClick={() => handleCardClick(card)}
+                onClick={() =>
+                  setSelectedCard(prev => (prev?.id === card.id ? null : card))
+                }
               />
             ))}
           </div>
         </div>
-
-        {/* Right-Side Tool Menu */}
         <div className="w-40 flex flex-col items-center gap-4 pt-2">
-        <button
-            onClick={() => setShowRules(true)}
-            className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full"
-          >
+          <button onClick={() => setShowRules(true)} className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full">
             Rules
           </button>
-          <button
-            onClick={() => setShowGuide(true)}
-            className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full"
-          >
+          <button onClick={() => setShowGuide(true)} className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full">
             Formations
           </button>
-
-          <button
-            onClick={() => setShowStats(true)}
-            className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full"
-          >
+          <button onClick={() => setShowStats(true)} className="bg-yellow-500 hover:bg-yellow-600 text-black font-semibold py-2 px-3 rounded shadow w-full">
             Deck Stats
           </button>
         </div>

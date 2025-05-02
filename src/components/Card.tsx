@@ -1,4 +1,3 @@
-import React from 'react';
 import { Card as CardType } from '../types/game';
 
 interface CardProps {
@@ -6,6 +5,7 @@ interface CardProps {
   onClick?: () => void;
   selected?: boolean;
   condensed?: boolean;
+  id?:string;
 }
 
 const colorMap = {
@@ -17,7 +17,7 @@ const colorMap = {
   yellow: 'bg-yellow-500 text-yellow-900 border-yellow-700'
 };
 
-export function Card({ card, onClick, selected, condensed = false }: CardProps) {
+export function Card({ card, onClick, selected, condensed = false, id }: CardProps) {
   const baseClasses = `
     ${colorMap[card.color]}
     ${selected ? 'ring-4 ring-white ring-offset-4 ring-offset-gray-900 scale-110' : ''}
@@ -48,6 +48,7 @@ export function Card({ card, onClick, selected, condensed = false }: CardProps) 
         flex flex-col items-center justify-center gap-1
         cursor-pointer hover:scale-105
       `}
+      id={id}
     >
       <span className="text-3xl font-bold">{card.value}</span>
     </div>
