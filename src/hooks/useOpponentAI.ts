@@ -7,6 +7,10 @@ export function useOpponentAI() {
     flags: Flag[],
     deck: Card[]
   ): { card: Card; flagIndex: number } | null {
+    const deckCheck = deck;
+    if (!deckCheck){
+      console.log("No Deck");//change to improve Computer reasoning later
+    }
     const playableCards = hand.filter(card => card != null);
     const openFlags = flags
       .map((f, i) => (f.winner || f.formation.opponent.cards.length >= 3 ? null : i))

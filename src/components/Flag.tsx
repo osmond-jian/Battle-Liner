@@ -1,4 +1,3 @@
-import React from 'react';
 import { Flag as FlagType } from '../types/game';
 import { Card } from './Card';
 

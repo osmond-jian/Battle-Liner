@@ -173,24 +173,24 @@ export function checkGameOver(flags: Flag[]): 'player' | 'opponent' | null {
   return null;
 }
 
-export function makeOpponentMove(
-  flags: Flag[],
-  hand: Card[],
-  deck: Card[]
-): { flagIndex: number; card: Card } | null {
-  // Simple AI: randomly choose a valid flag and card
-  const validFlags = flags.filter(flag => 
-    flag.winner === null && 
-    flag.formation.opponent.cards.length < 3
-  );
+// export function makeOpponentMove(
+//   flags: Flag[],
+//   hand: Card[],
+//   deck: Card[]
+// ): { flagIndex: number; card: Card } | null {
+//   // Simple AI: randomly choose a valid flag and card
+//   const validFlags = flags.filter(flag => 
+//     flag.winner === null && 
+//     flag.formation.opponent.cards.length < 3
+//   );
   
-  if (validFlags.length === 0 || hand.length === 0) return null;
+//   if (validFlags.length === 0 || hand.length === 0) return null;
   
-  const randomFlag = validFlags[Math.floor(Math.random() * validFlags.length)];
-  const randomCard = hand[Math.floor(Math.random() * hand.length)];
+//   const randomFlag = validFlags[Math.floor(Math.random() * validFlags.length)];
+//   const randomCard = hand[Math.floor(Math.random() * hand.length)];
   
-  return {
-    flagIndex: flags.findIndex(f => f.id === randomFlag.id),
-    card: randomCard
-  };
-}
+//   return {
+//     flagIndex: flags.findIndex(f => f.id === randomFlag.id),
+//     card: randomCard
+//   };
+// }

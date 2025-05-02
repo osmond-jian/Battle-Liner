@@ -151,7 +151,8 @@ export function GameBoard() {
     flag.formation.player.cards.push(card);
     setPlayerHand(prev => prev.filter(c => c.id !== card.id));
     setFlags(newFlags);
-  
+
+    // 2. Check for winner
     const winner = checkWinner(flag, deck, opponentHand);
     if (winner) flag.winner = winner;
   
@@ -162,7 +163,7 @@ export function GameBoard() {
       return;
     }
   
-    // ✅ Player draw first
+    // 3. Player Draws Card
     const [playerCard, ...deckAfterPlayerDraw] = deck;
     if (playerCard) {
       await new Promise(resolve => {

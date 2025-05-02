@@ -21,7 +21,7 @@ const colorClasses: Record<CardColor, string> = {
   yellow: 'bg-yellow-400 text-yellow-900',
 };
 
-export function DeckStats({ onClose, deck, playerHand, opponentHand, flags }: Props) {
+export function DeckStats({ onClose, playerHand, flags }: Props) {
     const knownCards = [
         ...playerHand,
         ...flags.flatMap(f => [...f.formation.player.cards, ...f.formation.opponent.cards]),
