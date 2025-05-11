@@ -1,22 +1,71 @@
 import { Flag as FlagType } from '../types/game';
 import { Card } from './Card';
+import type {Card as CardType} from '../types/game';
 
 interface FlagProps {
   flag: FlagType;
   onCardPlace?: () => void;
   selected?: boolean;
+  onDeserterSelect?: (card: CardType, flagIndex: number) => void;
+  deserterActive?: boolean;
+  flagIndex:number;
+  traitorActive?: boolean;
+  onTraitorSelect?: (card: CardType, fromFlagIndex: number) => void;
+  pendingTraitor?: { card: CardType; fromFlag: number } | null;
+  onTraitorDestination?: (toFlagIndex: number) => void;
+
 }
 
-export function Flag({ flag, onCardPlace, selected }: FlagProps) {
+export function Flag({ 
+  flag,
+  onCardPlace, 
+  selected,
+  deserterActive = false,
+  onDeserterSelect,
+  flagIndex,
+  traitorActive=false,
+  onTraitorSelect,
+  pendingTraitor,
+  onTraitorDestination,
+  
+}: FlagProps) {
   return (
     <div 
       className={`
-        flex flex-col items-center gap-2 p-4 rounded-lg
-        ${selected ? 'bg-blue-900/50 ring-2 ring-blue-500' : 'hover:bg-gray-800/50'}
+        flex flex-col items-center gap-2 p-4 rounded-lg relative
+        ${selected ? 'bg-blue-900/50 ring-2 ring-blue-500' : ''}
+        ${
+          pendingTraitor &&
+          flagIndex !== pendingTraitor.fromFlag &&
+          flag.formation.player.cards.length < 3 &&
+          !flag.winner
+            ? 'ring-2 ring-yellow-400 bg-yellow-400/10 cursor-pointer'
+            : 'hover:bg-gray-800/50'
+        }
         transition-colors duration-200
       `}
-      onClick={onCardPlace}
+      onClick={() => {
+        if (
+          pendingTraitor &&
+          flagIndex !== pendingTraitor.fromFlag &&
+          flag.formation.player.cards.length < 3 &&
+          !flag.winner &&
+          onTraitorDestination
+        ) {
+          onTraitorDestination(flagIndex);
+        } else {
+          onCardPlace?.();
+        }
+      }}
     >
+
+      {flag.modifiers.includes('fog') && (
+        <div className="text-xs text-gray-400 absolute bottom-1 left-1">🌫️ Fog</div>
+      )}
+      {flag.modifiers.includes('mud') && (
+        <div className="text-xs text-yellow-400 absolute bottom-1 right-1">💧 Mud</div>
+      )}
+      
       <div className="flex flex-col gap-4 items-center">
         {/* Opponent's cards */}
         <div className="relative h-24 w-20">
@@ -29,7 +78,20 @@ export function Flag({ flag, onCardPlace, selected }: FlagProps) {
                 zIndex: index,
               }}
             >
-              <Card card={card} condensed />
+              <Card
+                card={card}
+                condensed
+                onClick={() => {
+                  if (deserterActive && onDeserterSelect) {
+                    onDeserterSelect(card, flagIndex);
+                  } else if (traitorActive && onTraitorSelect && card.type === 'troop') {
+                    onTraitorSelect(card, flagIndex);
+                  }
+                }}
+                className={
+                  (deserterActive || traitorActive) ? 'ring-2 ring-red-400 cursor-pointer' : ''
+                }
+              />
             </div>
           ))}
         </div>

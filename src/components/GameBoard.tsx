@@ -9,11 +9,16 @@ import { RulesPopup } from './RulesPopup';
 import { FormationGuide } from './FormationGuide';
 import { CardFly } from './CardFly';
 import { useOpponentAI } from '../hooks/useOpponentAI';
+import { TacticsConfigModal } from './TacticalConfigModal';
+import { ScoutDrawModal } from './ScoutDrawModal';
+import { RedeployModal } from './RedeployModal';
+
 import {
   createDeck,
   createFlags,
   checkWinner,
   checkGameOver,
+  createTacticsDeck,
   TOTAL_CARDS
 } from '../utils/gameLogic';
 
@@ -48,13 +53,45 @@ export function GameBoard() {
   }>(null);
   const [animatingOppDraw, setAnimatingOppDraw] = useState<CardType | null>(null);
 
+  const [tacticsDeck, setTacticsDeck] = useState<CardType[]>([]);
+  const [playerTacticsPlayed, setPlayerTacticsPlayed] = useState<number>(0);
+  const [opponentTacticsPlayed, setOpponentTacticsPlayed] = useState<number>(0);
+  const [awaitingPlayerDraw, setAwaitingPlayerDraw] = useState(false);
+  const [redeployState, setRedeployState] = useState(false);
+  const [deserterActive, setDeserterActive] = useState<boolean>(false);
+  const [traitorActive, setTraitorActive] = useState(false);
+  const [traitorTargetCard, setTraitorTargetCard] = useState<CardType | null>(null);
+  const [pendingTraitor, setPendingTraitor] = useState<{ card: CardType; fromFlag: number } | null>(null);
+
+
+
+
+  const [scoutDrawStep, setScoutDrawStep] = useState<{
+    drawn: CardType[];
+    remaining: number;
+    keep?: CardType;
+    discards?: CardType[];
+  } | null>(null);
+  
+  
+
+
+  const [pendingTactics, setPendingTactics] = useState<{
+    card: CardType;
+    flagIndex: number;
+  } | null>(null);
+  
 
   const initializeGame = () => {
     const newDeck = createDeck();
     const playerInitialHand = newDeck.slice(0, 7);
     const opponentInitialHand = newDeck.slice(7, 14);
     const remainingDeck = newDeck.slice(14);
-
+    const fullDeck = createDeck(); // troop deck
+    const tactics = createTacticsDeck(); // write this util function
+    
+    setDeck(fullDeck);
+    setTacticsDeck(tactics);
     setDeck(remainingDeck);
     setPlayerHand(playerInitialHand);
     setOpponentHand(opponentInitialHand);
@@ -86,6 +123,54 @@ export function GameBoard() {
     } else {
       executePlayCard(flagIndex, selectedCard);
     }
+  };
+
+  const handleScoutDraw = (deckType: 'troop' | 'tactic') => {
+    if (!scoutDrawStep || scoutDrawStep.remaining <= 0) return;
+  
+    const deckToDraw = deckType === 'troop' ? deck : tacticsDeck;
+    if (deckToDraw.length === 0) return;
+  
+    const [card, ...rest] = deckToDraw;
+  
+    if (deckType === 'troop') setDeck(rest);
+    else setTacticsDeck(rest);
+  
+    setScoutDrawStep({
+      drawn: [...scoutDrawStep.drawn, card],
+      remaining: scoutDrawStep.remaining - 1,
+    });
+  };
+  
+  const handleScoutChoose = (chosen: CardType) => {
+    setPlayerHand(prev => [...prev, chosen]);
+    setScoutDrawStep(prev =>
+      prev ? { ...prev, keep: chosen, discards: prev.drawn.filter(c => c.id !== chosen.id) } : null
+    );
+    setPlayerTacticsPlayed(n => n + 1);
+  };
+
+  const handleScoutDiscardOrder = (selectedCard: CardType) => {
+    if (!scoutDrawStep || !scoutDrawStep.discards) return;
+  
+    const [first, second] = scoutDrawStep.discards;
+  
+    const updatedDiscards = scoutDrawStep.discards[0].id === selectedCard.id
+      ? [first, second]
+      : [second, first];
+  
+    // Now insert them back to their respective decks (in reverse to preserve top order)
+    updatedDiscards.slice().reverse().forEach(card => {
+      if (card.type === 'troop') {
+        setDeck(prev => [card, ...prev]);
+      } else {
+        setTacticsDeck(prev => [card, ...prev]);
+      }
+    });
+  
+    setPlayerHand(prev => [...prev, scoutDrawStep.keep!]);
+    setScoutDrawStep(null);
+    setPlayerTacticsPlayed(n => n + 1);
   };
 
   const animatedDrawCard = (isPlayer: boolean, card: CardType) => {
@@ -140,22 +225,120 @@ export function GameBoard() {
       updatedDeck: remainingDeck,
     });
   };
+
+  const drawFromDeck = async (deckType: 'troop' | 'tactic') => {
+    const source = deckType === 'troop' ? deck : tacticsDeck;
+    if (source.length === 0) return;
   
+    const [card, ...rest] = source;
+    if (deckType === 'troop') setDeck(rest);
+    else setTacticsDeck(rest);
+  
+    await new Promise(res => {
+      animatedDrawCard(true, card);
+      setTimeout(res, 600);
+    });
+  };
+
+  const handleTacticsEffect = (card: CardType, flagIndex: number) => {
+    const updatedFlags = [...flags];
+    const targetFlag = updatedFlags[flagIndex];
+  
+    if (card.name === 'Fog' && !targetFlag.modifiers.includes('fog')) {
+      targetFlag.modifiers.push('fog');
+    }
+  
+    if (card.name === 'Mud' && !targetFlag.modifiers.includes('mud')) {
+      targetFlag.modifiers.push('mud');
+    }
+
+    if (card.name === 'Scout') {
+      setScoutDrawStep({ drawn: [], remaining: 3 });
+      return;
+    }
+    
+    if (card.name === 'Redeploy') {
+      setRedeployState(true);
+    }
+
+    if (card.name === 'Deserter') {
+      setDeserterActive(true);
+    }
+
+    if (card.name === 'Traitor') {
+      setTraitorActive(true);
+      return;
+    }
+
+  
+    setFlags(updatedFlags);
+  };
+
+  const handleDeserterTarget = (card: CardType, flagIndex: number) => {
+    const updatedFlags = [...flags];
+    const oppCards = updatedFlags[flagIndex].formation.opponent.cards;
+
+    updatedFlags[flagIndex].formation.opponent.cards = oppCards.filter(c => c.id !== card.id);
+    setFlags(updatedFlags);
+
+    setOpponentTacticsPlayed(n => n + 1);
+    setDeserterActive(false);
+  };
+
+  const handleTraitorSelect = (card: CardType, fromFlag: number) => {
+    if (card.type !== 'troop') return; // Only troop cards are valid
+    setPendingTraitor({ card, fromFlag });
+    setTraitorActive(false); // Disable flag interaction temporarily
+  };
+
+  const handleTraitorDestination = (toFlagIndex: number) => {
+    if (!pendingTraitor) return;
+
+    const { card, fromFlag } = pendingTraitor;
+    if (fromFlag === toFlagIndex) return;
+
+    const newFlags = [...flags];
+
+    // Remove from opponent
+    newFlags[fromFlag].formation.opponent.cards = newFlags[fromFlag].formation.opponent.cards.filter(c => c.id !== card.id);
+
+    // Add to player side of new flag (if not full)
+    const targetFormation = newFlags[toFlagIndex].formation.player.cards;
+    if (targetFormation.length >= 3) return;
+
+    targetFormation.push(card);
+
+    setFlags(newFlags);
+    setPendingTraitor(null);
+  };
+
 
   const executePlayCard = async (flagIndex: number, card: CardType) => {
     const newFlags = [...flags];
     const flag = newFlags[flagIndex];
+  
     if (flag.formation.player.cards.length >= 3 || flag.winner) return;
   
-    // 1. Player plays
+    // Handle wild tactics (Leader, Shield Bearers, Companion Cavalry)
+    if (
+      card.type === 'tactic' &&
+      ['Leader', 'Shield Bearers', 'Companion Cavalry'].includes(card.name || '')
+    ) {
+      setPendingTactics({ card, flagIndex });
+      handleTacticsEffect(card, flagIndex);
+      return;
+    }
+  
+    // 1. Play the card
     flag.formation.player.cards.push(card);
     setPlayerHand(prev => prev.filter(c => c.id !== card.id));
     setFlags(newFlags);
-
-    // 2. Check for winner
+  
+    // 2. Check for flag winner
     const winner = checkWinner(flag, deck, opponentHand);
     if (winner) flag.winner = winner;
   
+    // 3. Check for game winner
     const gameWinner = checkGameOver(newFlags);
     console.log("Checking win with flag winners:", newFlags.map(f => f.winner));
     if (gameWinner === 'player') {
@@ -163,20 +346,28 @@ export function GameBoard() {
       return;
     }
   
-    // 3. Player Draws Card
+    // 4. Begin draw animation phase
+    setAwaitingPlayerDraw(true);
+  
     const [playerCard, ...deckAfterPlayerDraw] = deck;
     if (playerCard) {
       await new Promise(resolve => {
         animatedDrawCard(true, playerCard);
-        setTimeout(resolve, 600); 
+        setTimeout(resolve, 600);
       });
     }
-    setDeck(deckAfterPlayerDraw);
   
-    // ✅ Then pass updated deck to opponent
+    setDeck(deckAfterPlayerDraw);
+    setAwaitingPlayerDraw(false);
+  
+    // 5. Opponent's turn
     await handleOpponentTurn(deckAfterPlayerDraw);
   };
   
+  
+  const canPlayTactic = (): boolean => {
+    return playerHand.length < 7; // Or whatever condition you want for drawing Tactic cards
+  };  
   
   return (
     <div className="min-h-screen bg-gray-900 p-4">
@@ -279,7 +470,43 @@ export function GameBoard() {
           }}
         />
       )}
+      {/* Tactics Menu (to set rank/suit of tactics wild cards) */}
+      {pendingTactics && (
+        <TacticsConfigModal
+          cardName={pendingTactics.card.name!}
+          onConfirm={(color, value) => {
+            const configuredCard = { ...pendingTactics.card, color, value };
+            executePlayCard(pendingTactics.flagIndex, configuredCard);
+            setPlayerTacticsPlayed(n => n + 1);
+            setPlayerHand(prev => prev.filter(c => c.id !== pendingTactics.card.id));
+            setPendingTactics(null);
+          }}
+          onCancel={() => setPendingTactics(null)}
+        />
+      )}
+      {redeployState && (
+        <RedeployModal
+          flags={flags}
+          onCancel={() => setRedeployState(false)}
+          onConfirm={(sourceFlagIndex, cardIndex, destinationFlagIndex) => {
+            const newFlags = [...flags];
+            const [card] = newFlags[sourceFlagIndex].formation.player.cards.splice(cardIndex, 1);
 
+            if (destinationFlagIndex !== null) {
+              newFlags[destinationFlagIndex].formation.player.cards.push(card);
+            }
+
+            setFlags(newFlags);
+            setRedeployState(false);
+          }}
+        />
+      )}
+
+      {deserterActive && (
+        <div className="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow">
+          Deserter Active: Select an opponent's card to discard
+        </div>
+      )}
 
       {showGuide && <FormationGuide onClose={() => setShowGuide(false)} />}
       {showRules && <RulesPopup onClose={() => setShowRules(false)} />}
@@ -306,17 +533,85 @@ export function GameBoard() {
             <div className="flex gap-4">
               {flags.map((flag, i) => (
                 <div id={`flag-${i}`} key={flag.id}>
-                  <Flag
-                    flag={flag}
-                    selected={selectedFlag === i}
-                    onCardPlace={() =>
-                      selectedCard ? playCard(i) : setSelectedFlag(prev => (prev === i ? null : i))
+                <Flag
+                  flag={flag}
+                  selected={selectedFlag === i}
+                  traitorActive={traitorActive}
+                  onTraitorSelect={handleTraitorSelect}
+                  pendingTraitor={pendingTraitor}
+                  onTraitorDestination={handleTraitorDestination}
+                  flagIndex={i}
+                  onCardPlace={() => {
+                    if (traitorTargetCard) {
+                      // Attempt to move card to this flag
+                      const newFlags = [...flags];
+                      const fromIndex = (traitorTargetCard as any).fromFlagIndex;
+                      const fromFlag = newFlags[fromIndex];
+                      const toFlag = newFlags[i];
+
+                      if (toFlag.formation.player.cards.length >= 3 || toFlag.winner || fromFlag.winner) return;
+
+                      fromFlag.formation.opponent.cards = fromFlag.formation.opponent.cards.filter(c => c.id !== traitorTargetCard.id);
+                      toFlag.formation.player.cards.push(traitorTargetCard);
+                      setFlags(newFlags);
+
+                      setTraitorActive(false);
+                      setTraitorTargetCard(null);
+                      setPlayerTacticsPlayed(n => n + 1);
+                    } else if (selectedCard) {
+                      playCard(i);
+                    } else {
+                      setSelectedFlag(prev => (prev === i ? null : i));
                     }
-                  />
+                  }}
+                />
                 </div>
               ))}
             </div>
+
+            {/* Right: Tactics Deck */}
+            <div id="tactic-deck" className="w-24 flex justify-center">
+              <Deck cardsRemaining={tacticsDeck.length} variant="tactic" />
+            </div>
           </div>
+
+          {/* Tactical Config Modal */}
+          {gameState === 'playing' && flyingCard === null && animatingPlay === null && (
+            <div className="flex gap-4 justify-center mt-2">
+              <button
+                onClick={() => drawFromDeck('troop')}
+                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded shadow"
+              >
+                Draw Troop
+              </button>
+              <button
+                onClick={() => drawFromDeck('tactic')}
+                disabled={!canPlayTactic()}
+                className={`px-4 py-2 rounded shadow font-semibold ${
+                  canPlayTactic()
+                    ? 'bg-yellow-500 hover:bg-yellow-600 text-black'
+                    : 'bg-gray-500 text-gray-300 cursor-not-allowed'
+                }`}
+              >
+                Draw Tactic
+              </button>
+            </div>
+          )}
+
+          {scoutDrawStep && (
+            <ScoutDrawModal
+              drawn={scoutDrawStep.drawn}
+              remaining={scoutDrawStep.remaining}
+              keep={scoutDrawStep.keep}
+              discards={scoutDrawStep.discards}
+              onDrawFromTroop={() => handleScoutDraw('troop')}
+              onDrawFromTactic={() => handleScoutDraw('tactic')}
+              onPickFinal={handleScoutChoose}
+              onDiscardSelect={handleScoutDiscardOrder}
+              onCancel={() => setScoutDrawStep(null)}
+            />
+          )}
+
           <div id="hand" className="flex justify-center gap-2">
             {playerHand.map(card => (
               <Card

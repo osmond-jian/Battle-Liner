@@ -6,6 +6,7 @@ interface CardProps {
   selected?: boolean;
   condensed?: boolean;
   id?:string;
+  className?:string;
 }
 
 const colorMap = {
@@ -18,8 +19,9 @@ const colorMap = {
 };
 
 export function Card({ card, onClick, selected, condensed = false, id }: CardProps) {
+  const colorClass = card.color ? colorMap[card.color] : 'bg-gray-700 border-gray-600';
   const baseClasses = `
-    ${colorMap[card.color]}
+    ${colorClass}
     ${selected ? 'ring-4 ring-white ring-offset-4 ring-offset-gray-900 scale-110' : ''}
     border-2 shadow-md transition-all duration-200
   `;

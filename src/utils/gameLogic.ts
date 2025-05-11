@@ -11,7 +11,10 @@ export function createDeck(): Card[] {
       deck.push({
         id: `${color}-${value}`,
         color,
-        value
+        value,
+        type:"troop",
+        name:"none",
+        effect:"none",
       });
     });
   });
@@ -34,6 +37,7 @@ export function createFlags(): Flag[] {
       player: { cards: [], owner: null },
       opponent: { cards: [], owner: null }
     },
+    modifiers:[],
     winner: null
   }));
 }
@@ -56,12 +60,13 @@ function getCombinations(cards: Card[], size: number): Card[][] {
 function opponentCannotWin(
   completedFormation: Formation,
   opponentFormation: Formation,
-  availableCards: Card[]
+  availableCards: Card[],
+  requiredCards: number = 3
 ): boolean {
   const completedStrength = calculateFormationStrength(completedFormation);
-  const needed = 3 - opponentFormation.cards.length;
+  const needed = requiredCards - opponentFormation.cards.length;
 
-  if (needed <= 0) return false; // Already has 3 cards — handled by normal logic
+  if (needed <= 0) return false; // Opponent already has enough cards to be scored normally
 
   const allOptions = getCombinations(availableCards, needed);
 
@@ -71,11 +76,11 @@ function opponentCannotWin(
       owner: 'opponent' as const,
     };
     if (calculateFormationStrength(hypothetical) > completedStrength) {
-      return false; // Can still win
+      return false; // There exists a combo that beats the formation
     }
   }
 
-  return true; // No combo can win
+  return true; // No possible combo can win
 }
 
 
@@ -83,22 +88,17 @@ function opponentCannotWin(
 function calculateFormationStrength(formation: Formation): number {
   if (formation.cards.length < 3) return 0;
   // Sort by value for straight detection
-  const sortedCards = [...formation.cards].sort((a, b) => a.value - b.value);
-  
-  // Check for color flush
-  const isFlush = formation.cards.every(card => card.color === formation.cards[0].color);
-  
-  // Check for straight
+  const validCards = formation.cards.filter(c => c.value !== undefined && c.color !== undefined);
+  const sortedCards = [...validCards].sort((a, b) => a.value! - b.value!);
+
+  //check for formations
+  const isFlush = validCards.every(card => card.color === validCards[0].color);
   const isStraight = sortedCards.every((card, i) => {
     if (i === 0) return true;
-    return card.value === sortedCards[i - 1].value + 1;
+    return card.value! === sortedCards[i - 1].value! + 1;
   });
-
-  //Check for three-of-a-kind
-  const isThreeOfKind = sortedCards.every(card => card.value === formation.cards[0].value)
-
-  // Calculate base sum
-  const sum = formation.cards.reduce((acc, card) => acc + card.value, 0);
+  const isThreeOfKind = validCards.every(card => card.value === validCards[0].value);
+  const sum = validCards.reduce((acc, card) => acc + (card.value ?? 0), 0);  
 
   // Apply multipliers for special combinations
   if (isFlush && isStraight) return sum * 10000; // Straight flush
@@ -112,38 +112,49 @@ function calculateFormationStrength(formation: Formation): number {
 export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] = []): 'player' | 'opponent' | null {
   if (flag.winner) return flag.winner;
 
-  const playerCards = flag.formation.player.cards;
-  const opponentCards = flag.formation.opponent.cards;
+  const { player, opponent } = flag.formation;
+  const playerCards = player.cards;
+  const opponentCards = opponent.cards;
 
-  const playerStrength = calculateFormationStrength(flag.formation.player);
-  const opponentStrength = calculateFormationStrength(flag.formation.opponent);
+  const hasFog = flag.modifiers.includes('fog');
+  const requiredCards = flag.modifiers.includes('mud') ? 4 : 3;
 
-  // Normal case: both sides have full formations
-  if (playerCards.length === 3 && opponentCards.length === 3) {
+  // Fog logic: compare total card values
+  if (hasFog && playerCards.length === requiredCards && opponentCards.length === requiredCards) {
+    const playerTotal = playerCards.reduce((sum, c) => sum + (c.value || 0), 0);
+    const opponentTotal = opponentCards.reduce((sum, c) => sum + (c.value || 0), 0);
+    return playerTotal > opponentTotal ? 'player' : opponentTotal > playerTotal ? 'opponent' : null;
+  }
+
+  // Normal case
+  const playerStrength = calculateFormationStrength(player);
+  const opponentStrength = calculateFormationStrength(opponent);
+
+  if (playerCards.length === requiredCards && opponentCards.length === requiredCards) {
     if (playerStrength > opponentStrength) return 'player';
     if (opponentStrength > playerStrength) return 'opponent';
   }
 
-  // Early win check: player has full, opponent can't win
+  // Early win check
   if (
-    playerCards.length === 3 &&
-    opponentCards.length < 3 &&
-    opponentCannotWin(flag.formation.player, flag.formation.opponent, [...deck, ...opponentHand])
+    playerCards.length === requiredCards &&
+    opponentCards.length < requiredCards &&
+    opponentCannotWin(player, opponent, [...deck, ...opponentHand], requiredCards)
   ) {
     return 'player';
   }
 
-  // Early win check: opponent has full, player can't win
   if (
-    opponentCards.length === 3 &&
-    playerCards.length < 3 &&
-    opponentCannotWin(flag.formation.opponent, flag.formation.player, deck) // we don't see opponent's hand
+    opponentCards.length === requiredCards &&
+    playerCards.length < requiredCards &&
+    opponentCannotWin(opponent, player, deck, requiredCards)
   ) {
     return 'opponent';
   }
 
   return null;
 }
+
 
 export function checkGameOver(flags: Flag[]): 'player' | 'opponent' | null {
   const playerFlags = flags.filter(flag => flag.winner === 'player').length;
@@ -173,24 +184,88 @@ export function checkGameOver(flags: Flag[]): 'player' | 'opponent' | null {
   return null;
 }
 
-// export function makeOpponentMove(
-//   flags: Flag[],
-//   hand: Card[],
-//   deck: Card[]
-// ): { flagIndex: number; card: Card } | null {
-//   // Simple AI: randomly choose a valid flag and card
-//   const validFlags = flags.filter(flag => 
-//     flag.winner === null && 
-//     flag.formation.opponent.cards.length < 3
-//   );
-  
-//   if (validFlags.length === 0 || hand.length === 0) return null;
-  
-//   const randomFlag = validFlags[Math.floor(Math.random() * validFlags.length)];
-//   const randomCard = hand[Math.floor(Math.random() * hand.length)];
-  
-//   return {
-//     flagIndex: flags.findIndex(f => f.id === randomFlag.id),
-//     card: randomCard
-//   };
-// }
+export function createTacticsDeck(): Card[] {
+  return [
+    {
+      id: 't1',
+      type: 'tactic',
+      name: 'Leader',
+      effect: 'wild',
+      color: undefined,
+      value: 0,
+    },
+    {
+      id: 't2',
+      type: 'tactic',
+      name: 'Leader',
+      effect: 'wild',
+      color: undefined,
+      value: 0,
+    },
+    {
+      id: 't3',
+      type: 'tactic',
+      name: 'Companion Cavalry',
+      effect: 'value8',
+      color: undefined,
+      value: 8,
+    },
+    {
+      id: 't4',
+      type: 'tactic',
+      name: 'Shield Bearers',
+      effect: 'value≤3',
+      color: undefined,
+      value: 3,
+    },
+    {
+      id: 't5',
+      type: 'tactic',
+      name: 'Fog',
+      effect: 'fog',
+      color: undefined,
+      value: 0,
+    },
+    {
+      id: 't6',
+      type: 'tactic',
+      name: 'Mud',
+      effect: 'mud',
+      color: undefined,
+      value: 0,
+    },
+    {
+      id: 't7',
+      type: 'tactic',
+      name: 'Scout',
+      effect: 'scout',
+      color: undefined,
+      value: 0,
+    },
+    {
+      id: 't8',
+      type: 'tactic',
+      name: 'Redeploy',
+      effect: 'redeploy',
+      color: undefined,
+      value: 0,
+    },
+    {
+      id: 't9',
+      type: 'tactic',
+      name: 'Deserter',
+      effect: 'deserter',
+      color: undefined,
+      value: 0,
+    },
+    {
+      id: 't10',
+      type: 'tactic',
+      name: 'Traitor',
+      effect: 'traitor',
+      color: undefined,
+      value: 0,
+    },
+  ];
+}
+

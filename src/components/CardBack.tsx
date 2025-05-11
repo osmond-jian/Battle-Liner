@@ -1,10 +1,9 @@
-import React from 'react';
-
 interface CardBackProps extends React.HTMLAttributes<HTMLDivElement> {
   width?: string;
   height?: string;
-  children?: React.ReactNode; // For centered overlay like "46"
+  children?: React.ReactNode;
   id?: string;
+  variant?: 'troop' | 'tactic';
 }
 
 export function CardBack({
@@ -14,30 +13,37 @@ export function CardBack({
   id,
   style,
   className = '',
+  variant = 'troop',
   ...rest
 }: CardBackProps) {
+  const bgClass =
+    variant === 'troop'
+      ? 'bg-gray-800 border-gray-700'
+      : 'bg-yellow-900 border-yellow-600';
+
   return (
     <div
       id={id}
       style={style}
-      className={`${width} ${height} bg-gray-800 rounded-lg shadow-md border-2 border-gray-700 relative overflow-hidden hover:scale-105 transition-transform duration-200 ${className}`}
+      className={`${width} ${height} ${bgClass} rounded-lg shadow-md border-2 relative overflow-hidden hover:scale-105 transition-transform duration-200 ${className}`}
       {...rest}
     >
-      {/* Always render the circle in the background */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-gray-700 rounded-full" />
+        <div
+          className={`w-12 h-12 border-4 rounded-full ${
+            variant === 'troop' ? 'border-gray-700' : 'border-yellow-500'
+          }`}
+        />
       </div>
 
-      {/* Optional overlay content (e.g. cardsRemaining) */}
       {children && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
           {children}
         </div>
       )}
 
-      {/* Shading effect */}
       <div className="absolute inset-0">
-        <div className="w-full h-full bg-gradient-to-br from-gray-700/30 to-transparent" />
+        <div className="w-full h-full bg-gradient-to-br from-black/20 to-transparent" />
       </div>
     </div>
   );

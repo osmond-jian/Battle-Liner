@@ -2,7 +2,7 @@ import { Card } from './Card';
 import { Card as CardType, CardColor, CardValue } from '../types/game';
 
 // Helper function to cast color strings correctly
-const toCard = (id: string, value: CardValue, color: CardColor): CardType => ({ id, value, color });
+const toCard = (id: string, value: CardValue, color: CardColor): CardType => ({ id, value, color, type:'troop',});
 
 const formations = [
   {
