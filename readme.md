@@ -32,7 +32,5 @@ yarn run dev
 The project is still a work in progress. Here are some major tasks that still need to be done:
 
 1. Add multiplayer functionalities - allow players to join lobbies and host games.
-2. Add tactics cards as a option
-3. Improve the look of the cards
-4. Allow player to "prove" that the flag is won - This is currently done automatically. Maybe think about making it manual (evaluate flag by clicking on it?)
-5. Add a user login platform.
+2. Improve the look of the cards
+3. Add a user login platform.

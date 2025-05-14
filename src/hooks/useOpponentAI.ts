@@ -1,16 +1,17 @@
 import { Card, Flag } from '../types/game';
+import type { Move } from '../types/Move';
 
-// For now, a simple AI that randomly picks a card and flag
 export function useOpponentAI() {
   function getMove(
     hand: Card[],
     flags: Flag[],
     deck: Card[]
-  ): { card: Card; flagIndex: number } | null {
-    const deckCheck = deck;
-    if (!deckCheck){
-      console.log("No Deck");//change to improve Computer reasoning later
+  ): Move | null {
+    if (!deck || deck.length === 0) {
+      console.log("No Deck");
+      return null;
     }
+
     const playableCards = hand.filter(card => card != null);
     const openFlags = flags
       .map((f, i) => (f.winner || f.formation.opponent.cards.length >= 3 ? null : i))
@@ -21,7 +22,12 @@ export function useOpponentAI() {
     const card = playableCards[Math.floor(Math.random() * playableCards.length)];
     const flagIndex = openFlags[Math.floor(Math.random() * openFlags.length)];
 
-    return { card, flagIndex };
+    return {
+      player: 'opponent',
+      action: card.type === 'tactic' ? 'useTactic' : 'playCard',
+      card,
+      flagIndex,
+    };
   }
 
   return { getMove };

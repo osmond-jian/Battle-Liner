@@ -1,10 +1,9 @@
-
-import { GameBoard } from './components/GameBoard';
+import { GameManager } from './components/GameManager';
 
 function App() {
   return (
     <div className="min-h-screen bg-gray-100">
-      <GameBoard />
+      <GameManager />
     </div>
   );
 }

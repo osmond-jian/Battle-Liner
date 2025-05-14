@@ -28,7 +28,7 @@ export function ScoutDrawModal({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center">
       <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 shadow-lg text-white max-w-xl">
-        <h2 className="text-lg font-bold mb-4 text-center">Scout: Draw {remaining} more card{remaining !== 1 ? 's' : ''}</h2>
+        <h2 className="text-lg font-bold mb-4 text-center"> Scout: Draw {remaining} more card{remaining !== 1 ? 's' : ''}</h2>
         
         {remaining > 0 ? (
           // Step 1: Drawing cards

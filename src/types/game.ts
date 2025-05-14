@@ -27,4 +27,24 @@ export interface Flag {
   winner: 'player' | 'opponent' | null;
 }
 
-export type GameState = 'playing' | 'playerWon' | 'opponentWon';
+export interface GameState {
+  gameStatus: 'no-game' | 'playing' | 'playerWon' | 'opponentWon';
+  opponentHand: Card[];
+  playerHand: Card[];
+  deck: Card[];
+  tacticsDeck: Card[];
+  flags: Flag[];
+  selectedCard: Card | null;
+  selectedFlag: number | null;
+  deserterActive: boolean;
+  traitorActive: boolean;
+  pendingTraitor: { card: Card; fromFlag: number } | null;
+  pendingTactics: { card: Card; flagIndex: number } | null;
+  scoutDrawStep: {
+    drawn: Card[];
+    remaining: number;
+    keep?: Card;
+    discards?: Card[];
+  } | null;
+  redeployState: boolean;
+}
