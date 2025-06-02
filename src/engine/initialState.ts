@@ -32,5 +32,6 @@ export function createInitialState(): FullGameState {
     deserterActive: false,
     traitorActive: false,
     redeployState: false,
+    leaderPending: undefined,
   };
 }

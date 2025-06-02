@@ -17,6 +17,11 @@ export interface FullGameState {
   deserterActive: boolean;
   traitorActive: boolean;
 
+  leaderPending?: { card: Card; flagIndex: number };
+  companionPending?: { card: Card; flagIndex: number };
+  shieldPending?: { card: Card; flagIndex: number };
+
+
   // For traitor behavior
   pendingTraitor: {
     card: Card;

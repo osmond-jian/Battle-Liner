@@ -10,21 +10,34 @@ interface CardFlyProps {
 }
 
 export function CardFly({ card, from, to, onComplete }: CardFlyProps) {
-    console.log('Rendering CardFly', { from, to, card });
+  console.log('Rendering CardFly', { from, to, card });
+  
+  // Generate a unique key for this animation instance
+  const motionKey = `${card.id}-${from.x.toFixed(0)}-${from.y.toFixed(0)}-${to.x.toFixed(0)}-${to.y.toFixed(0)}`;
+
   return (
     <motion.div
-      className="fixed z-50 pointer-events-none"
-      initial={{ x: from.x, y: from.y }}
-      animate={{ x: to.x, y: to.y }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
-      onAnimationComplete={onComplete}
+      key={motionKey}
+      className="fixed pointer-events-none"
       style={{
-        width: '88px',        // or match your <Card /> size
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '88px',
         height: '140px',
-        backgroundColor:'red',
+        zIndex: 9999,
+        transform: `translate(${from.x}px, ${from.y}px)`
       }}
+      animate={{
+        transform: `translate(${to.x}px, ${to.y}px)`
+      }}
+      transition={{ 
+        duration: 0.5, 
+        ease: 'easeOut' 
+      }}
+      onAnimationComplete={onComplete}
     >
-      <Card card={card} />
+      <Card card={card} id={`flying-${card.id}`} onClick={() => {}} selected={false} />
     </motion.div>
   );
 }

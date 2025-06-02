@@ -69,7 +69,7 @@ export function Flag({
       
       <div className="flex flex-col items-center justify-between gap-2">
         {/* Opponent's cards */}
-        <div className="relative h-24 w-20">
+        <div id={`flag-${flagIndex}-opponent`} className="relative h-24 w-20">
           {flag.formation.opponent.cards.map((card, index) => (
             <div
               key={card.id}
@@ -131,7 +131,7 @@ export function Flag({
         </div>
 
         {/* Player's cards */}
-        <div className="relative h-24 w-20">
+        <div id={`flag-${flagIndex}-player`} className="relative h-24 w-20">
           {flag.formation.player.cards.map((card, index) => (
             <div
               key={card.id}

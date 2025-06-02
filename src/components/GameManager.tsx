@@ -1,11 +1,16 @@
 import { useReducer, useState, useEffect, useRef } from 'react';
-import { reducer } from '../engine/gameEngine';
+import { reducer, GameAction } from '../engine/gameEngine';
 import { createInitialState } from '../engine/initialState';
 import { GameBoard } from './GameBoard';
 import { useOpponentAI } from '../hooks/useOpponentAI';
+import { useAnimateAction, ActionToAnimate } from '../hooks/useAnimateAction';
 import type { Card as CardType, CardColor, CardValue } from '../types/game';
-import type { GameAction } from '../engine/gameEngine';
 import type { Move } from '../types/Move';
+import type { GameState } from '../types/game';
+
+
+type TurnPhase = 'player' | 'opponent' | 'awaitingDraw';
+
 
 export function GameManager() {
   const [gameState, dispatch] = useReducer(reducer, createInitialState());
@@ -16,6 +21,8 @@ export function GameManager() {
   const [onAnimationDone, setOnAnimationDone] = useState<(() => void) | null>(null);
   const [playerMoveDraft, setPlayerMoveDraft] = useState<Partial<Move>>({});
   const [currentTurn, setCurrentTurn] = useState<'player' | 'opponent' | 'awaitingDraw'>('player');
+  const [animatingAction, setAnimatingAction] = useState<'PLAY_CARD'|'DRAW_CARD'|null>(null);
+
 
   const [showRules, setShowRules] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -24,6 +31,14 @@ export function GameManager() {
   const { getMove } = useOpponentAI();
 
   const gameStateRef = useRef(gameState);
+
+  const animateAction = useAnimateAction(
+    gameStateRef,
+    setFlyFrom,
+    setFlyTo,
+    setFlyingCard,
+    setOnAnimationDone
+  );
 
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -63,71 +78,97 @@ export function GameManager() {
     setPlayerMoveDraft({});
   };
 
-  const runTurn = (move: Move) => {
+  const runTurn = (move: { card: CardType; flagIndex: number; player: 'player'|'opponent'; action: 'playCard'|'useTactic' }) => {
+    console.log('🏃 runTurn got move:', move);
     setCurrentTurn(move.player);
-    playPhase(move, () => {
+    updateGameBoard(move, () => {
       if (move.player === 'player') {
-        setCurrentTurn('awaitingDraw'); // Wait for manual deck pick
+        setCurrentTurn('awaitingDraw');
       } else {
         drawPhase('opponent', move.action);
-        setTimeout(() => setCurrentTurn('player'), 500);
       }
     });
   };
 
-  const playPhase = (move: Move, onComplete: () => void) => {
-    updateGameBoard(move, () => {
-      onComplete();
-    });
-  };
+  const drawPhase = (
+    player: 'player' | 'opponent',
+    actionType: 'playCard' | 'useTactic'
+  ) => {
+    const deckType = actionType === 'useTactic' ? 'tactic' : 'troop';
 
-  const drawPhase = (player: 'player' | 'opponent', action: 'playCard' | 'useTactic') => {
-    const deckType = action === 'useTactic' ? 'tactic' : 'troop';
+    // 1) update game state
     dispatch({ type: 'DRAW_CARD', deckType, player });
 
-    if (player === 'player') {
-      // turn will pass only after draw
-      setTimeout(() => {
-        setCurrentTurn('opponent');
-        const oppMove = getMove(
-          gameStateRef.current.opponentHand,
-          gameStateRef.current.flags,
-          gameStateRef.current.deck
-        );
-        if (oppMove) runTurn({ ...oppMove, player: 'opponent', action: 'playCard' });
-      }, 500);
-    }
+    // 2) build the animation action
+    const action: ActionToAnimate = { type: 'DRAW_CARD', deckType, player };
+
+    // 3) mark animating
+    setAnimatingAction(action.type);
+
+    // 4) **delay** the actual animation until after React re‐renders
+    setTimeout(() => {
+      animateAction(action, () => {
+        // clear animating flag
+        setAnimatingAction(null);
+        // if opponent draw, hand turn back
+        if (player === 'opponent') setCurrentTurn('player');
+      });
+    }, 0);
   };
 
-  const updateGameBoard = (move: Move, onComplete: () => void) => {
-      console.log('Animating move:', move);
-    const sourceId = move.player === 'player' ? `card-${move.card.id}` : 'opponent-hand';
-    const cardEl = document.getElementById(sourceId);
-    const flagEl = document.getElementById(`flag-${move.flagIndex}`);
-    if (!cardEl || !flagEl) return;
+  const updateGameBoard = (
+    move: { card: CardType; flagIndex: number; player: 'player'|'opponent'; action: 'playCard'|'useTactic' },
+    onComplete: () => void
+  ) => {
+    const action: ActionToAnimate = {
+      type: move.action === 'useTactic' ? 'APPLY_TACTIC' : 'PLAY_CARD',
+      card: move.card,
+      flagIndex: move.flagIndex,
+      player: move.player
+    };
 
-    const from = cardEl.getBoundingClientRect();
-    const to = flagEl.getBoundingClientRect();
+    setAnimatingAction('PLAY_CARD');  // Animation type can remain 'PLAY_CARD' visually
 
-    setFlyFrom({ x: from.left, y: from.top });
-    setFlyTo({ x: to.left, y: to.top });
-    setFlyingCard(move.card);
-    setOnAnimationDone(() => () => {
-      dispatch({ type: 'PLAY_CARD', card: move.card, flagIndex: move.flagIndex, player: move.player });
-      setFlyingCard(null);
+    animateAction(action, () => {
+      if (move.action === 'useTactic') {
+        dispatch({
+          type: 'APPLY_TACTIC', // 👈 Correct action type!
+          card: move.card,
+          flagIndex: move.flagIndex
+        });
+      } else {
+        dispatch({
+          type: 'PLAY_CARD',
+          card: move.card,
+          flagIndex: move.flagIndex,
+          player: move.player
+        });
+      }
+
+      setAnimatingAction(null);
       onComplete();
     });
-    console.log('Flying from', from, 'to', to);
   };
 
+
+
   const handleAnimationComplete = () => {
-    if (onAnimationDone) onAnimationDone();
+    console.log('Animation complete called');
+    
+    // Use the stored callback if available
+    if (onAnimationDone) {
+      onAnimationDone();
+    }
+    
+    // Handle opponent card animation if needed
     if (opponentCardToAnimate) {
-      dispatch({ type: 'DRAW_CARD', deckType: 'troop', player:'opponent' });
+      dispatch({ type: 'DRAW_CARD', deckType: 'troop', player: 'opponent' });
       setOpponentCardToAnimate(null);
     }
-    setFlyingCard(null);
+    
+    // Clean up animation state
     setOnAnimationDone(null);
+    setFlyingCard(null);
   };
 
   const handleNewGame = () => {
@@ -139,17 +180,36 @@ export function GameManager() {
     setCurrentTurn('player');
   };
 
-  const handleDeckDraw = (deckType: 'troop' | 'tactic') => {
-    dispatch({ type: 'DRAW_CARD', deckType, player:'player' });
-    if (deckType === 'troop') setTimeout(() => triggerOpponentMove(), 500);
-  };
+  const handleDeckDraw = (deckType: 'troop'|'tactic') => {
+    // 1) update game state
+    dispatch({ type: 'DRAW_CARD', deckType, player: 'player' });
 
-  const triggerOpponentMove = () => {
-    const move = getMove(gameState.opponentHand, gameState.flags, gameState.deck);
-    if (!move) return;
-    updateGameBoard(move, () => {
-      dispatch({ type: 'DRAW_CARD', deckType: 'troop', player:'opponent' });
-    });
+    // 2) build the animation action
+    const action: ActionToAnimate = {
+      type: 'DRAW_CARD',
+      deckType,
+      player: 'player'
+    };
+
+    // 3) mark that we’re animating a draw
+    setAnimatingAction(action.type);
+
+    // 4) run it with delay
+    setTimeout(() => {
+      animateAction(action, () => {
+        // 5) clear the flag
+        setAnimatingAction(null);
+
+        // 6) now pass turn to opponent
+        setCurrentTurn('opponent');
+        const oppMove = getMove(
+          gameStateRef.current.opponentHand,
+          gameStateRef.current.flags,
+          gameStateRef.current.deck
+        );
+        if (oppMove) runTurn({ ...oppMove, player: 'opponent', action: 'playCard' });
+      });
+    }, 0);
   };
 
   const handleRedeployConfirm = (sourceFlagIndex: number, cardIndex: number, destinationFlagIndex: number | null) => {
@@ -178,18 +238,41 @@ export function GameManager() {
   };
 
   const handleTacticsConfigConfirm = (color: string, value: number) => {
-    if (!gameState.pendingTactics?.flagIndex) return;
-    dispatch({
-      type: 'APPLY_TACTIC',
-      card: {
-        ...gameState.pendingTactics.card,
+    const pending = gameState.pendingTactics;
+    if (!pending) return;
+
+    const cardName = pending.card.name;
+
+    if (!cardName) return;
+
+    if (cardName === 'Leader') {
+      dispatch({
+        type: 'SET_LEADER_CARD',
         color: color as CardColor,
         value: value as CardValue,
-      },
-      flagIndex: gameState.pendingTactics.flagIndex,
-    });
-    dispatch({ type: 'CLEAR_PENDING_TACTIC' });
+      });
+    } else if (cardName === 'Companion Cavalry') {
+      dispatch({
+        type: 'SET_COMPANION_CARD',
+        color: color as CardColor,
+        value: value as CardValue,
+      });
+    } else {
+      // fallback for future tactics that may use config
+      dispatch({
+        type: 'APPLY_TACTIC',
+        card: {
+          ...pending.card,
+          color: color as CardColor,
+          value: value as CardValue,
+        },
+        flagIndex: pending.flagIndex,
+      });
+
+      dispatch({ type: 'CLEAR_PENDING_TACTIC' });
+    }
   };
+
 
   const handleTacticsCancel = () => {
     dispatch({ type: 'CLEAR_PENDING_TACTIC' });
@@ -207,7 +290,7 @@ export function GameManager() {
       dispatch({ type: 'TRAITOR_CAPTURE', card, flagIndex });
     }
   };
-  
+
   function getTurnMessage(turn: TurnPhase, state: GameState): string {
   if (turn === 'player') {
     return 'Play a card';
@@ -221,7 +304,6 @@ export function GameManager() {
   return '';
 }
 
-
   return (
     <GameBoard
       gameState={gameState}
@@ -231,6 +313,7 @@ export function GameManager() {
       onShowGuide={() => setShowGuide(true)}
       onShowStats={() => setShowStats(true)}
       flyingCard={flyingCard}
+      animatingAction={animatingAction}
       flyFrom={flyFrom}
       flyTo={flyTo}
       onResetGame={handleNewGame}

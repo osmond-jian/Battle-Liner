@@ -15,6 +15,10 @@ import { RulesPopup } from './RulesPopup';
 import { ScoutDrawModal } from './ScoutDrawModal';
 import { TacticsConfigModal } from './TacticalConfigModal';
 import { ProfileCard } from './profileCard';
+import { DeserterModal } from './DeserterModal';
+import { TraitorCaptureModal } from './TraitorCaptureModal';
+import { TraitorPlaceModal } from './TraitorPlaceModal';
+import { LeaderConfigModal } from './LeaderConfigModal';
 
 interface GameBoardProps {
   gameState: GameState;
@@ -44,6 +48,7 @@ interface GameBoardProps {
   flyTo: { x: number; y: number };
   onFlyComplete: () => void;
   turnMessage:string;
+  animatingAction:'PLAY_CARD' | 'DRAW_CARD' | null;
 }
 
 export function GameBoard({
@@ -73,8 +78,26 @@ export function GameBoard({
   flyingCard,
   flyFrom,
   flyTo,
-  onFlyComplete
+  onFlyComplete,
+  animatingAction,
 }: GameBoardProps) {
+// // Debug flying card state changes
+//   useEffect(() => {
+//     if (flyingCard) {
+//       console.log("🎴 Flying card state changed:", flyingCard);
+//       console.log("📍 From:", flyFrom);
+//       console.log("🎯 To:", flyTo);
+//     }
+//   }, [flyingCard, flyFrom, flyTo]);
+
+//   // Debug animation completion
+//   useEffect(() => {
+//     if (onAnimationDone) {
+//       console.log("🔄 Animation callback set");
+//     } else {
+//       console.log("✅ Animation callback cleared");
+//     }
+//   }, [onAnimationDone]);
     return (
     <div className="min-h-screen bg-gray-900 text-white p-4 space-y-6">
       {/* Navigation */}
@@ -102,7 +125,20 @@ export function GameBoard({
         <ProfileCard name="CPU Bot" isOpponent />
         <div className="flex justify-center w-full">
           <div id="opponent-hand" className="flex gap-2">
-            {gameState.opponentHand.map((card: CardType) => <CardBack key={card.id} variant="troop" />)}
+            {gameState.opponentHand.map(card => {
+              const isHidden =
+                flyingCard?.id === card.id &&
+                animatingAction === 'DRAW_CARD';
+
+              return (
+                <CardBack
+                  key={card.id}
+                  id={`opponent-card-${card.id}`}
+                  variant="troop"
+                  className={isHidden ? 'invisible' : ''}
+                />
+              );
+            })}
           </div>
         </div>
         
@@ -117,7 +153,7 @@ export function GameBoard({
       {/* Main Game Area */}
       <div className="flex items-start justify-between w-full px-4">
         {/* Troop Deck */}
-        <div className="flex flex-col items-center gap-1 mt-8">
+        <div id="deck-troop" className="flex flex-col items-center gap-1 mt-8">
           <Deck cardsRemaining={gameState.deck.length} />
           <button onClick={() => onDeckDraw('troop')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow transition">Draw Troop</button>
         </div>
@@ -142,7 +178,7 @@ export function GameBoard({
         </div>
 
         {/* Tactics Deck */}
-        <div className="flex flex-col items-center gap-1 mt-8">
+        <div id="deck-tactic" className="flex flex-col items-center gap-1 mt-8">
           <Deck cardsRemaining={gameState.tacticsDeck.length} variant="tactic" />
           <button onClick={() => onDeckDraw('tactic')} className="bg-yellow-400 hover:bg-yellow-500 text-black px-4 py-2 rounded shadow transition">Draw Tactic</button>
         </div>
@@ -152,20 +188,36 @@ export function GameBoard({
       <div className="flex items-center gap-4 px-4 mt-6">
         <ProfileCard name="You" />
         <div id="hand" className="flex justify-center flex-wrap gap-2 w-full">
-          {gameState.playerHand.map(card => (
-            <Card
-              key={card.id}
-              id={`card-${card.id}`}
-              card={card}
-              onClick={() => onCardClick(card)}
-              selected={gameState.selectedCard?.id === card.id}
-            />
-          ))}
+          {gameState.playerHand.map(card => {            
+            const isHidden =
+              flyingCard?.id === card.id &&
+              animatingAction === 'DRAW_CARD';
+
+            return (
+              <Card
+                key={card.id}
+                id={`player-card-${card.id}`}
+                card={card}
+                onClick={() => onCardClick(card)}
+                selected={gameState.selectedCard?.id === card.id}
+                className={isHidden ? 'invisible' : ''}
+              />
+            );
+          })}
         </div>
       </div>
 
       {/* Flying card animation */}
-      {flyingCard && <CardFly card={flyingCard} from={flyFrom} to={flyTo} onComplete={onFlyComplete} />}
+      {flyingCard && (
+        <CardFly
+          card={flyingCard}
+          from={flyFrom}
+          to={flyTo}
+          onComplete={() => {
+            onFlyComplete(); // Your logic to clear state or dispatch
+          }}
+        />
+      )}
 
       {/* Modals */}
       {showRules && <RulesPopup onClose={onCloseRules} />}
@@ -193,13 +245,40 @@ export function GameBoard({
         />
       )}
 
+      {gameState.deserterActive && (
+        <DeserterModal
+          flags={gameState.flags}
+          onConfirm={onOpponentCardClick}
+          onCancel={onTacticsCancel}
+        />
+      )}
+
+      {gameState.traitorActive && (
+        <TraitorCaptureModal
+          flags={gameState.flags}
+          onCapture={onOpponentCardClick}
+        />
+      )}
+
+      {gameState.pendingTraitor && (
+        <TraitorPlaceModal
+          onPlace={onTraitorPlace}
+        />
+      )}
+
+      {gameState.leaderPending && (
+        <LeaderConfigModal
+          card={gameState.leaderPending.card}
+          onConfirm={(color, value) => onTacticsConfigConfirm(color, value)}
+          onCancel={onTacticsCancel}
+        />
+      )}
+
       {/* Tactic Prompts */}
       {gameState.deserterActive && <div className="fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow">Deserter Active: Click an opponent card to remove</div>}
       {gameState.traitorActive && <div className="fixed top-4 right-4 bg-yellow-500 text-black px-4 py-2 rounded shadow">Traitor Active: Click an opponent troop to convert</div>}
       {gameState.pendingTraitor && <div className="text-center text-yellow-300 font-medium mt-4">Select a flag to place the captured card: {gameState.pendingTraitor.card.name}</div>}
     </div>
   </div>
-
-  
   );
 }

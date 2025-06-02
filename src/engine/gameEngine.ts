@@ -21,7 +21,11 @@ export type GameAction =
   | { type: 'DESERTER_DISCARD'; card: Card; flagIndex: number }
   | { type: 'TRAITOR_CAPTURE'; card: Card; flagIndex: number }
   | { type: 'TRAITOR_PLACE'; toFlagIndex: number }
-  | { type: 'RESET_GAME' };
+  | { type: 'RESET_GAME' }
+  | { type: 'SET_LEADER_CARD'; color: Card['color']; value: Card['value'] }
+  | { type: 'SET_COMPANION_CARD'; color: Card['color']; value: Card['value'] }
+  | { type: 'PLACE_SHIELD_BEARERS' };
+
 
 export function reducer(state: FullGameState, action: GameAction): FullGameState {
   const newState = structuredClone(state);
@@ -148,35 +152,70 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
     case 'APPLY_TACTIC': {
       const flag = newState.flags[action.flagIndex];
 
-      if (action.card.name === 'Fog' && !flag.modifiers.includes('fog')) {
-        flag.modifiers.push('fog');
-      }
+      // Remove from hand
+      newState.playerHand = newState.playerHand.filter(c => c.id !== action.card.id);
+      newState.playerTacticsPlayed += 1;
 
-      if (action.card.name === 'Mud' && !flag.modifiers.includes('mud')) {
-        flag.modifiers.push('mud');
-      }
+      switch (action.card.name) {
+        case 'Fog':
+          if (!flag.modifiers.includes('fog')) {
+            flag.modifiers.push('fog');
+          }
+          break;
 
-      if (action.card.name === 'Scout') {
-        newState.scoutDrawStep = {
-          drawn: [],
-          remaining: 3,
-        };
-      }
+        case 'Mud':
+          if (!flag.modifiers.includes('mud')) {
+            flag.modifiers.push('mud');
+          }
+          break;
 
-      if (action.card.name === 'Deserter') {
-        newState.deserterActive = true;
-      }
+        case 'Scout':
+          newState.scoutDrawStep = { drawn: [], remaining: 3 };
+          break;
 
-      if (action.card.name === 'Traitor') {
-        newState.traitorActive = true;
-      }
+        case 'Deserter':
+          newState.deserterActive = true;
+          newState.pendingTactics = {
+            card: action.card,
+            flagIndex: action.flagIndex,
+          };
+          break;
 
-      if (action.card.name === 'Redeploy') {
-        newState.redeployState = true;
+        case 'Traitor':
+          newState.traitorActive = true;
+          newState.pendingTactics = {
+            card: action.card,
+            flagIndex: action.flagIndex,
+          };
+          break;
+
+        case 'Redeploy':
+          newState.redeployState = true;
+          newState.pendingTactics = {
+            card: action.card,
+            flagIndex: action.flagIndex,
+          };
+          break;
+
+        case 'Leader':
+          newState.leaderPending = { card: action.card, flagIndex: action.flagIndex };
+          return newState;
+
+        case 'Companion Cavalry':
+          newState.companionPending = { card: action.card, flagIndex: action.flagIndex };
+          return newState;
+
+        case 'Shield Bearers':
+          newState.shieldPending = { card: action.card, flagIndex: action.flagIndex };
+          return newState;
+
+        default:
+          break;
       }
 
       return newState;
     }
+
 
     case 'SET_PENDING_TACTIC':
       newState.pendingTactics = {
@@ -201,6 +240,7 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
       const card = newState.flags[action.sourceFlagIndex].formation.player.cards.splice(action.cardIndex, 1)[0];
       newState.flags[action.destinationFlagIndex].formation.player.cards.push(card);
       newState.redeployState = false;
+      newState.pendingTactics = null;
       return newState;
     }
 
@@ -209,6 +249,7 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
         c => c.id !== action.card.id
       );
       newState.deserterActive = false;
+      newState.pendingTactics = null;
       return newState;
 
     case 'TRAITOR_CAPTURE':
@@ -232,6 +273,47 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
     case 'RESET_GAME': {
       return createInitialState();
     }
+
+    case 'SET_LEADER_CARD': {
+      const pending = newState.leaderPending;
+      if (!pending) return newState;
+
+      const modifiedCard = {
+        ...pending.card,
+        color: action.color,
+        value: action.value,
+      };
+
+      newState.flags[pending.flagIndex].formation.player.cards.push(modifiedCard);
+      newState.leaderPending = undefined;
+      newState.pendingTactics = null;
+      return newState;
+    }
+
+    case 'SET_COMPANION_CARD': {
+      const pending = newState.companionPending;
+      if (!pending) return newState;
+
+      const modifiedCard = {
+        ...pending.card,
+        color: action.color,
+        value: action.value,
+      };
+
+      newState.flags[pending.flagIndex].formation.player.cards.push(modifiedCard);
+      newState.companionPending = undefined;
+      return newState;
+    }
+
+    case 'PLACE_SHIELD_BEARERS': {
+      const pending = newState.shieldPending;
+      if (!pending) return newState;
+
+      newState.flags[pending.flagIndex].formation.player.cards.push(pending.card);
+      newState.shieldPending = undefined;
+      return newState;
+    }
+
 
     default:
       return newState;
