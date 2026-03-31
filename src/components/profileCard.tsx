@@ -4,19 +4,20 @@ interface ProfileCardProps {
   isOpponent?: boolean;
 }
 
-export function ProfileCard({ name, avatarUrl, isOpponent = false }: ProfileCardProps) {
+export function ProfileCard({ name, isOpponent = false }: ProfileCardProps) {
+  const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
   return (
-    <div className={`flex items-center gap-2 bg-gray-800 p-3 rounded-lg border border-gray-700 shadow ${isOpponent ? 'self-start' : 'self-end'}`}>
-      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-600">
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={`${name}'s avatar`} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-300 text-sm">
-            ?
-          </div>
-        )}
+    <div className={`flex flex-col items-center gap-1.5 shrink-0`}>
+      <div className={`
+        w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold select-none shadow-lg
+        ${isOpponent
+          ? 'bg-gradient-to-br from-red-800 to-red-600 text-red-100 ring-2 ring-red-500/40'
+          : 'bg-gradient-to-br from-blue-700 to-blue-500 text-blue-100 ring-2 ring-blue-400/40'}
+      `}>
+        {initials || '?'}
       </div>
-      <div className="text-sm font-semibold text-white">{name}</div>
+      <span className="text-[11px] font-semibold text-slate-400 tracking-wide">{name}</span>
     </div>
   );
 }

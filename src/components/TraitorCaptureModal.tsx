@@ -7,19 +7,37 @@ interface TraitorCaptureModalProps {
 }
 
 export function TraitorCaptureModal({ flags, onCapture }: TraitorCaptureModalProps) {
+  // Only troop cards from non-won flags can be captured
+  const targets = flags.flatMap((flag, flagIndex) => {
+    if (flag.winner) return [];
+    return flag.formation.opponent.cards
+      .filter(card => card.type === 'troop')
+      .map(card => ({ card, flagIndex }));
+  });
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-      <div className="bg-gray-800 p-6 rounded-lg border border-gray-600 shadow-lg max-w-3xl w-full">
-        <h2 className="text-xl font-bold text-yellow-400 mb-4">Select an opponent's card to capture</h2>
-        <div className="grid grid-cols-3 gap-4">
-          {flags.map((flag, flagIndex) =>
-            flag.formation.opponent.cards.map((card) => (
-              <div key={card.id} onClick={() => onCapture(card, flagIndex)} className="cursor-pointer">
-                <Card card={card} />
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-800 border border-slate-700 p-6 rounded-xl shadow-2xl max-w-2xl w-full text-white">
+        <h2 className="text-lg font-bold text-amber-400 mb-1">Traitor</h2>
+        <p className="text-sm text-slate-400 mb-4">Select an opponent troop card to steal for your side.</p>
+
+        {targets.length === 0 ? (
+          <p className="text-sm text-slate-500 italic">No opponent troop cards available to capture.</p>
+        ) : (
+          <div className="flex flex-wrap gap-3 justify-center">
+            {targets.map(({ card, flagIndex }) => (
+              <div key={card.id} className="flex flex-col items-center gap-1">
+                <div
+                  onClick={() => onCapture(card, flagIndex)}
+                  className="cursor-pointer hover:scale-105 transition-transform ring-2 ring-transparent hover:ring-amber-400 rounded-xl"
+                >
+                  <Card card={card} />
+                </div>
+                <span className="text-[10px] text-slate-500">Flag {flagIndex + 1}</span>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

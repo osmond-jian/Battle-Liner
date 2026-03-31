@@ -1,13 +1,12 @@
-import { Card, CardColor, CardValue, Flag, Formation } from '../types/game';
+import { Card, Flag, Formation } from '../types/game';
+import { CARD_COLORS, CARD_VALUES } from '../constants';
 
-const COLORS: CardColor[] = ['red', 'blue', 'green', 'orange', 'purple', 'yellow'];
-const VALUES: CardValue[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-export const TOTAL_CARDS = COLORS.length * VALUES.length;
+export const TOTAL_CARDS = CARD_COLORS.length * CARD_VALUES.length;
 
 export function createDeck(): Card[] {
   const deck: Card[] = [];
-  COLORS.forEach(color => {
-    VALUES.forEach(value => {
+  CARD_COLORS.forEach(color => {
+    CARD_VALUES.forEach(value => {
       deck.push({
         id: `${color}-${value}`,
         color,
@@ -57,6 +56,10 @@ function getCombinations(cards: Card[], size: number): Card[][] {
   return results;
 }
 
+/**
+ * Returns true when no combination of `availableCards` can give `opponentFormation`
+ * a higher formation strength than `completedFormation`. Used for normal (non-fog) flags.
+ */
 function opponentCannotWin(
   completedFormation: Formation,
   opponentFormation: Formation,
@@ -66,29 +69,56 @@ function opponentCannotWin(
   const completedStrength = calculateFormationStrength(completedFormation);
   const needed = requiredCards - opponentFormation.cards.length;
 
-  if (needed <= 0) return false; // Opponent already has enough cards to be scored normally
+  if (needed <= 0) return false;
 
   const allOptions = getCombinations(availableCards, needed);
 
   for (const combo of allOptions) {
-    const hypothetical = {
+    const hypothetical: Formation = {
       cards: [...opponentFormation.cards, ...combo],
-      owner: 'opponent' as const,
+      owner: opponentFormation.owner,
     };
     if (calculateFormationStrength(hypothetical) > completedStrength) {
-      return false; // There exists a combo that beats the formation
+      return false;
     }
   }
 
-  return true; // No possible combo can win
+  return true;
+}
+
+/**
+ * Returns true when no combination of `availableCards` can give the incomplete
+ * side a higher card-value total than `completedTotal`. Used for fog flags.
+ */
+function opponentCannotWinFog(
+  completedTotal: number,
+  incompleteCards: Card[],
+  availableCards: Card[],
+  requiredCards: number
+): boolean {
+  const needed = requiredCards - incompleteCards.length;
+  if (needed <= 0) return false;
+
+  const currentTotal = incompleteCards.reduce((sum, c) => sum + (c.value ?? 0), 0);
+  const allOptions = getCombinations(availableCards, needed);
+
+  for (const combo of allOptions) {
+    const comboTotal = combo.reduce((sum, c) => sum + (c.value ?? 0), 0);
+    if (currentTotal + comboTotal > completedTotal) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 
 
 function calculateFormationStrength(formation: Formation): number {
-  if (formation.cards.length < 3) return 0;
-  // Sort by value for straight detection
-  const validCards = formation.cards.filter(c => c.value !== undefined && c.color !== undefined);
+  // Only cards with both a color and a positive value count (excludes unconfigured tactic cards).
+  const validCards = formation.cards.filter(c => c.value != null && c.value > 0 && c.color != null);
+  // Need at least 3 valid cards to form any scoring hand.
+  if (validCards.length < 3) return 0;
   const sortedCards = [...validCards].sort((a, b) => a.value! - b.value!);
 
   //check for formations
@@ -117,39 +147,62 @@ export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] 
   const opponentCards = opponent.cards;
 
   const hasFog = flag.modifiers.includes('fog');
+  // Mud requires 4 cards per side; applies independently of Fog.
   const requiredCards = flag.modifiers.includes('mud') ? 4 : 3;
 
-  // Fog logic: compare total card values
-  if (hasFog && playerCards.length === requiredCards && opponentCards.length === requiredCards) {
-    const playerTotal = playerCards.reduce((sum, c) => sum + (c.value || 0), 0);
-    const opponentTotal = opponentCards.reduce((sum, c) => sum + (c.value || 0), 0);
-    return playerTotal > opponentTotal ? 'player' : opponentTotal > playerTotal ? 'opponent' : null;
-  }
-
-  // Normal case
-  const playerStrength = calculateFormationStrength(player);
-  const opponentStrength = calculateFormationStrength(opponent);
-
+  // ── Both sides have completed their formation ──────────────────────────────
   if (playerCards.length === requiredCards && opponentCards.length === requiredCards) {
-    if (playerStrength > opponentStrength) return 'player';
-    if (opponentStrength > playerStrength) return 'opponent';
+    if (hasFog) {
+      // Fog: winner is whoever has the higher raw total, formation type is ignored.
+      const playerTotal = playerCards.reduce((sum, c) => sum + (c.value ?? 0), 0);
+      const opponentTotal = opponentCards.reduce((sum, c) => sum + (c.value ?? 0), 0);
+      if (playerTotal > opponentTotal) return 'player';
+      if (opponentTotal > playerTotal) return 'opponent';
+      return null; // tie
+    }
+    // Normal: compare formation strength.
+    const ps = calculateFormationStrength(player);
+    const os = calculateFormationStrength(opponent);
+    if (ps > os) return 'player';
+    if (os > ps) return 'opponent';
+    return null;
   }
 
-  // Early win check
-  if (
-    playerCards.length === requiredCards &&
-    opponentCards.length < requiredCards &&
-    opponentCannotWin(player, opponent, [...deck, ...opponentHand], requiredCards)
-  ) {
-    return 'player';
-  }
+  // ── Early-win checks (one side is complete, the other isn't yet) ───────────
+  // Only consider troop cards when determining what the incomplete side could
+  // still draw — unconfigured tactic cards have unknown future values and would
+  // corrupt the combination scoring if included.
+  const troopPool = [...deck, ...opponentHand].filter(c => c.type === 'troop');
+  const playerTroopPool = deck.filter(c => c.type === 'troop');
 
-  if (
-    opponentCards.length === requiredCards &&
-    playerCards.length < requiredCards &&
-    opponentCannotWin(opponent, player, deck, requiredCards)
-  ) {
-    return 'opponent';
+  if (hasFog) {
+    if (playerCards.length === requiredCards && opponentCards.length < requiredCards) {
+      const playerTotal = playerCards.reduce((sum, c) => sum + (c.value ?? 0), 0);
+      if (opponentCannotWinFog(playerTotal, opponentCards, troopPool, requiredCards)) {
+        return 'player';
+      }
+    }
+    if (opponentCards.length === requiredCards && playerCards.length < requiredCards) {
+      const opponentTotal = opponentCards.reduce((sum, c) => sum + (c.value ?? 0), 0);
+      if (opponentCannotWinFog(opponentTotal, playerCards, playerTroopPool, requiredCards)) {
+        return 'opponent';
+      }
+    }
+  } else {
+    if (
+      playerCards.length === requiredCards &&
+      opponentCards.length < requiredCards &&
+      opponentCannotWin(player, opponent, troopPool, requiredCards)
+    ) {
+      return 'player';
+    }
+    if (
+      opponentCards.length === requiredCards &&
+      playerCards.length < requiredCards &&
+      opponentCannotWin(opponent, player, playerTroopPool, requiredCards)
+    ) {
+      return 'opponent';
+    }
   }
 
   return null;

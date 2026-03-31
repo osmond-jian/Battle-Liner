@@ -1,7 +1,7 @@
-import { FullGameState } from '../types/FullGameState';
+import { GameState } from '../types/game';
 import { createDeck, createFlags, createTacticsDeck } from '../utils/gameLogic';
 
-export function createInitialState(): FullGameState {
+export function createInitialState(): GameState {
   const troopDeck = createDeck();
   const tacticsDeck = createTacticsDeck();
 

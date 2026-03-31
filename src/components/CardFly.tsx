@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Card as CardType } from '../types/game';
 import { Card } from './Card';
+import { CARD_WIDTH_PX, CARD_HEIGHT_PX } from '../constants';
 
 interface CardFlyProps {
   card: CardType;
@@ -10,9 +11,6 @@ interface CardFlyProps {
 }
 
 export function CardFly({ card, from, to, onComplete }: CardFlyProps) {
-  console.log('Rendering CardFly', { from, to, card });
-  
-  // Generate a unique key for this animation instance
   const motionKey = `${card.id}-${from.x.toFixed(0)}-${from.y.toFixed(0)}-${to.x.toFixed(0)}-${to.y.toFixed(0)}`;
 
   return (
@@ -23,17 +21,17 @@ export function CardFly({ card, from, to, onComplete }: CardFlyProps) {
         position: 'fixed',
         top: 0,
         left: 0,
-        width: '88px',
-        height: '140px',
+        width: `${CARD_WIDTH_PX}px`,
+        height: `${CARD_HEIGHT_PX}px`,
         zIndex: 9999,
         transform: `translate(${from.x}px, ${from.y}px)`
       }}
       animate={{
         transform: `translate(${to.x}px, ${to.y}px)`
       }}
-      transition={{ 
-        duration: 0.5, 
-        ease: 'easeOut' 
+      transition={{
+        duration: 0.5,
+        ease: 'easeOut'
       }}
       onAnimationComplete={onComplete}
     >

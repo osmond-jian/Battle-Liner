@@ -1,94 +1,131 @@
-import React, { useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { Card as CardType } from '../types/game';
-import type { FullGameState } from '../types/FullGameState';
+import { CARD_WIDTH_PX, CARD_HEIGHT_PX } from '../constants';
 
 export type ActionToAnimate =
-  | {
-      type: 'DRAW_CARD';
-      deckType: 'troop' | 'tactic';
-      player: 'player' | 'opponent';
-    }
-  | {
-      type: 'PLAY_CARD';
-      card: CardType;
-      flagIndex: number;
-      player: 'player' | 'opponent';
-    }
-  | {
-      type: 'APPLY_TACTIC';
-      card: CardType;
-      flagIndex: number;
-      player: 'player' | 'opponent';
-    };
+  | { type: 'DRAW_CARD'; deckType: 'troop' | 'tactic'; player: 'player' | 'opponent'; card: CardType }
+  | { type: 'PLAY_CARD'; card: CardType; flagIndex: number; player: 'player' | 'opponent' }
+  | { type: 'APPLY_TACTIC'; card: CardType; flagIndex: number; player: 'player' | 'opponent' };
 
+export interface AnimationState {
+  flyingCard: CardType | null;
+  flyFrom: { x: number; y: number };
+  flyTo: { x: number; y: number };
+  animatingAction: 'PLAY_CARD' | 'DRAW_CARD' | null;
+}
 
 /**
- * Encapsulates the animateAction implementation.
+ * Returns the screen position where the next drawn card will land in the hand.
+ *
+ * For DRAW_CARD, we target just after the current last card so the fly animation
+ * lands exactly where the card will appear. After dispatch, Framer Motion's
+ * `layout` prop on each hand card animates the whole row to its newly centered
+ * positions.
  */
-export function useAnimateAction(
-  gameStateRef: React.MutableRefObject<FullGameState>,
-  setFlyFrom:     React.Dispatch<React.SetStateAction<{ x: number; y: number }>>,
-  setFlyTo:       React.Dispatch<React.SetStateAction<{ x: number; y: number }>>,
-  setFlyingCard:  React.Dispatch<React.SetStateAction<CardType | null>>,
-  setOnAnimationDone: React.Dispatch<React.SetStateAction<(() => void) | null>>
-) {
-  return useCallback((action: ActionToAnimate, onComplete: () => void) => {
+function computeDrawTarget(
+  player: 'player' | 'opponent',
+): { x: number; y: number } | null {
+  const handId     = player === 'player' ? 'hand' : 'opponent-hand';
+  const cardPrefix = player === 'player' ? 'player-card-' : 'opponent-card-';
+
+  const handEl = document.getElementById(handId);
+  if (!handEl) return null;
+
+  const handRect     = handEl.getBoundingClientRect();
+  const existingCards = Array.from(
+    handEl.querySelectorAll(`[id^="${cardPrefix}"]`),
+  ) as HTMLElement[];
+
+  // No cards yet — center of the hand container
+  if (existingCards.length === 0) {
+    return {
+      x: handRect.left + handRect.width  / 2 - CARD_WIDTH_PX  / 2,
+      y: handRect.top  + handRect.height / 2 - CARD_HEIGHT_PX / 2,
+    };
+  }
+
+  const lastCard = existingCards[existingCards.length - 1];
+  const lastRect = lastCard.getBoundingClientRect();
+  const GAP = 6; // gap-1.5 = 6 px
+  const nextX = lastRect.right + GAP;
+
+  // Fits on the same row
+  if (nextX + CARD_WIDTH_PX <= handRect.right + 16) {
+    return { x: nextX, y: lastRect.top };
+  }
+
+  // Would overflow — estimate next row
+  return {
+    x: handRect.left,
+    y: lastRect.bottom + GAP,
+  };
+}
+
+export function useAnimations() {
+  const [flyingCard, setFlyingCard]       = useState<CardType | null>(null);
+  const [flyFrom, setFlyFrom]             = useState({ x: 0, y: 0 });
+  const [flyTo,   setFlyTo]               = useState({ x: 0, y: 0 });
+  const [animatingAction, setAnimatingAction] =
+    useState<'PLAY_CARD' | 'DRAW_CARD' | null>(null);
+
+  const onDoneRef = useRef<(() => void) | null>(null);
+
+  const animate = useCallback((action: ActionToAnimate, onComplete: () => void) => {
     requestAnimationFrame(() => {
-      let fromEl: HTMLElement | null = null;
-      let toEl:   HTMLElement | null = null;
-      let card:   CardType;
+      if (action.type === 'PLAY_CARD' || action.type === 'APPLY_TACTIC') {
+        const fromEl = document.getElementById(`${action.player}-card-${action.card.id}`);
+        const toEl   = document.getElementById(`flag-${action.flagIndex}-${action.player}`);
 
-    if (action.type === 'PLAY_CARD' || action.type === 'APPLY_TACTIC') {
-        // Always fly from the exact card element, whether it's the player’s or opponent’s card
-        const sourceId = `${action.player}-card-${action.card.id}`;
-        const flagId   = `flag-${action.flagIndex}`;
-        const slotId = `flag-${action.flagIndex}-${action.player}`;
+        if (!fromEl || !toEl) { onComplete(); return; }
 
-        fromEl = document.getElementById(sourceId);
-        toEl   = document.getElementById(slotId);
-        card   = action.card;
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect   = toEl.getBoundingClientRect();
+
+        setFlyFrom({ x: fromRect.left, y: fromRect.top });
+        setFlyTo({   x: toRect.left,   y: toRect.top   });
 
       } else {
-        // ——— Draw-card animation
-        // 1) source = deck
-        const deckId = `deck-${action.deckType}`;
-        fromEl = document.getElementById(deckId);
+        // DRAW_CARD — fly from the deck to where the card will land in the hand.
+        // The dispatch happens in onComplete (after the animation), so the card is
+        // never in the DOM until the fly finishes — no flash.
+        const fromEl = document.getElementById(`deck-${action.deckType}`);
+        if (!fromEl) { onComplete(); return; }
 
-        // 2) figure out which card just landed in the hand
-        const handArr = action.player === 'player'
-          ? gameStateRef.current.playerHand
-          : gameStateRef.current.opponentHand;
-        card = handArr[handArr.length - 1];
+        const target = computeDrawTarget(action.player);
+        if (!target) { onComplete(); return; }
 
-        // 3) target = that card’s own element
-        const cardId = `${action.player}-card-${card.id}`;
-        toEl = document.getElementById(cardId);
-        console.log('DRAW from:', deckId, fromEl, 'to:', cardId, toEl);
+        const fromRect = fromEl.getBoundingClientRect();
+        setFlyFrom({ x: fromRect.left, y: fromRect.top });
+        setFlyTo(target);
       }
 
-      if (!fromEl || !toEl) {
-        console.error('Couldn’t find elements to animate', action, { fromEl, toEl });
-        onComplete();
-        return;
-      }
-
-      const fromRect = fromEl.getBoundingClientRect();
-      const toRect   = toEl.getBoundingClientRect();
-
-      setFlyFrom({ x: fromRect.left, y: fromRect.top });
-      setFlyTo({   x: toRect.left,   y: toRect.top   });
-      setFlyingCard(card);
-
-      setOnAnimationDone(() => () => {
+      setFlyingCard(action.card);
+      onDoneRef.current = () => {
         setFlyingCard(null);
         onComplete();
-      });
+      };
     });
-  }, [
-    gameStateRef,
-    setFlyFrom,
-    setFlyTo,
-    setFlyingCard,
-    setOnAnimationDone
-  ]);
+  }, []);
+
+  const handleFlyComplete = useCallback(() => {
+    onDoneRef.current?.();
+    onDoneRef.current = null;
+  }, []);
+
+  const resetAnimations = useCallback(() => {
+    setFlyingCard(null);
+    setAnimatingAction(null);
+    onDoneRef.current = null;
+  }, []);
+
+  return {
+    flyingCard,
+    flyFrom,
+    flyTo,
+    animatingAction,
+    setAnimatingAction,
+    animate,
+    handleFlyComplete,
+    resetAnimations,
+  };
 }

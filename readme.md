@@ -1,4 +1,5 @@
 This is a web app for the card game, "Battle Line". It's a personal project that will allow some friends to play the game online.
+
 Here's how to start the app:
 1. Install the dependencies with yarn or npm
 ```

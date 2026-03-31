@@ -1,3 +1,20 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Thin scrollbar for the flags row */
+.flags-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.flags-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.flags-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 2px;
+}

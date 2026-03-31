@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { GameManager } from './components/GameManager';
+import { LandingPage } from './components/LandingPage';
 
 function App() {
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <GameManager />
-    </div>
-  );
+  const [inGame, setInGame] = useState(false);
+
+  if (!inGame) {
+    return <LandingPage onStart={() => setInGame(true)} />;
+  }
+
+  return <GameManager onExit={() => setInGame(false)} />;
 }
 
 export default App;

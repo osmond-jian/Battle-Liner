@@ -1,5 +1,4 @@
-import { Card, Flag } from '../types/game';
-import { FullGameState } from '../types/FullGameState';
+import { Card, Flag, GameState } from '../types/game';
 import { createInitialState } from '../engine/initialState'
 import { checkGameOver, checkWinner } from '../utils/gameLogic';
 
@@ -24,10 +23,12 @@ export type GameAction =
   | { type: 'RESET_GAME' }
   | { type: 'SET_LEADER_CARD'; color: Card['color']; value: Card['value'] }
   | { type: 'SET_COMPANION_CARD'; color: Card['color']; value: Card['value'] }
-  | { type: 'PLACE_SHIELD_BEARERS' };
+  | { type: 'SET_SHIELD_BEARERS_CARD'; color: Card['color']; value: Card['value'] }
+  | { type: 'CANCEL_TACTIC_CONFIG' }
+  | { type: 'REDEPLOY_DISCARD'; sourceFlagIndex: number; cardIndex: number };
 
 
-export function reducer(state: FullGameState, action: GameAction): FullGameState {
+export function reducer(state: GameState, action: GameAction): GameState {
   const newState = structuredClone(state);
 
   switch (action.type) {
@@ -44,7 +45,8 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
       const flag = newState.flags[flagIndex];
 
       // Prevent overfilling or placing on completed flags
-      if (flag.formation[player].cards.length >= 3 || flag.winner) return newState;
+      const required = flag.modifiers.includes('mud') ? 4 : 3;
+      if (flag.formation[player].cards.length >= required || flag.winner) return newState;
 
       // Add card to correct side
       flag.formation[player].cards.push(card);
@@ -134,7 +136,9 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
       newState.scoutDrawStep.keep = action.chosen;
       newState.scoutDrawStep.discards = newState.scoutDrawStep.drawn.filter(c => c.id !== action.chosen.id);
       newState.playerHand.push(action.chosen);
-      newState.playerTacticsPlayed += 1;
+      // Do NOT increment playerTacticsPlayed here — picking a card from the Scout
+      // draw is not playing a new tactic. The counter was incremented when Scout
+      // was played via APPLY_TACTIC.
 
       return newState;
 
@@ -237,8 +241,11 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
       return newState;
 
     case 'REDEPLOY_CARD': {
+      const destFlag = newState.flags[action.destinationFlagIndex];
+      const destSlots = destFlag.modifiers.includes('mud') ? 4 : 3;
+      if (destFlag.winner || destFlag.formation.player.cards.length >= destSlots) return newState;
       const card = newState.flags[action.sourceFlagIndex].formation.player.cards.splice(action.cardIndex, 1)[0];
-      newState.flags[action.destinationFlagIndex].formation.player.cards.push(card);
+      destFlag.formation.player.cards.push(card);
       newState.redeployState = false;
       newState.pendingTactics = null;
       return newState;
@@ -268,6 +275,12 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
       sourceFlag.formation.opponent.cards = sourceFlag.formation.opponent.cards.filter(c => c.id !== card!.id);
       targetFlag.formation.player.cards.push(card!);
       newState.pendingTraitor = null;
+      newState.pendingTactics = null;
+      // Check whether moving the card wins the target flag or the game.
+      const traitorWinner = checkWinner(targetFlag, newState.deck, newState.opponentHand);
+      if (traitorWinner) targetFlag.winner = traitorWinner;
+      const traitorGameWinner = checkGameOver(newState.flags);
+      if (traitorGameWinner) newState.gameStatus = traitorGameWinner === 'player' ? 'playerWon' : 'opponentWon';
       return newState;
     }
     case 'RESET_GAME': {
@@ -277,40 +290,68 @@ export function reducer(state: FullGameState, action: GameAction): FullGameState
     case 'SET_LEADER_CARD': {
       const pending = newState.leaderPending;
       if (!pending) return newState;
-
-      const modifiedCard = {
-        ...pending.card,
-        color: action.color,
-        value: action.value,
-      };
-
-      newState.flags[pending.flagIndex].formation.player.cards.push(modifiedCard);
+      const modifiedCard = { ...pending.card, color: action.color, value: action.value };
+      const leaderFlag = newState.flags[pending.flagIndex];
+      leaderFlag.formation.player.cards.push(modifiedCard);
       newState.leaderPending = undefined;
       newState.pendingTactics = null;
+      const leaderFlagWinner = checkWinner(leaderFlag, newState.deck, newState.opponentHand);
+      if (leaderFlagWinner) leaderFlag.winner = leaderFlagWinner;
+      const leaderGameWinner = checkGameOver(newState.flags);
+      if (leaderGameWinner) newState.gameStatus = leaderGameWinner === 'player' ? 'playerWon' : 'opponentWon';
       return newState;
     }
 
     case 'SET_COMPANION_CARD': {
       const pending = newState.companionPending;
       if (!pending) return newState;
-
-      const modifiedCard = {
-        ...pending.card,
-        color: action.color,
-        value: action.value,
-      };
-
-      newState.flags[pending.flagIndex].formation.player.cards.push(modifiedCard);
+      const modifiedCard = { ...pending.card, color: action.color, value: action.value };
+      const companionFlag = newState.flags[pending.flagIndex];
+      companionFlag.formation.player.cards.push(modifiedCard);
       newState.companionPending = undefined;
+      newState.pendingTactics = null;
+      const companionFlagWinner = checkWinner(companionFlag, newState.deck, newState.opponentHand);
+      if (companionFlagWinner) companionFlag.winner = companionFlagWinner;
+      const companionGameWinner = checkGameOver(newState.flags);
+      if (companionGameWinner) newState.gameStatus = companionGameWinner === 'player' ? 'playerWon' : 'opponentWon';
       return newState;
     }
 
-    case 'PLACE_SHIELD_BEARERS': {
+    case 'SET_SHIELD_BEARERS_CARD': {
       const pending = newState.shieldPending;
       if (!pending) return newState;
-
-      newState.flags[pending.flagIndex].formation.player.cards.push(pending.card);
+      const modifiedCard = { ...pending.card, color: action.color, value: action.value };
+      const shieldFlag = newState.flags[pending.flagIndex];
+      shieldFlag.formation.player.cards.push(modifiedCard);
       newState.shieldPending = undefined;
+      newState.pendingTactics = null;
+      const shieldFlagWinner = checkWinner(shieldFlag, newState.deck, newState.opponentHand);
+      if (shieldFlagWinner) shieldFlag.winner = shieldFlagWinner;
+      const shieldGameWinner = checkGameOver(newState.flags);
+      if (shieldGameWinner) newState.gameStatus = shieldGameWinner === 'player' ? 'playerWon' : 'opponentWon';
+      return newState;
+    }
+
+    case 'CANCEL_TACTIC_CONFIG':
+      // Clears all wild-card pending states so their modals dismiss.
+      newState.leaderPending = undefined;
+      newState.companionPending = undefined;
+      newState.shieldPending = undefined;
+      newState.pendingTactics = null;
+      return newState;
+
+    case 'REDEPLOY_DISCARD': {
+      const card = newState.flags[action.sourceFlagIndex].formation.player.cards.splice(action.cardIndex, 1)[0];
+      if (card) {
+        // Return to the bottom of the appropriate deck.
+        if (card.type === 'tactic') {
+          newState.tacticsDeck.push(card);
+        } else {
+          newState.deck.push(card);
+        }
+      }
+      newState.redeployState = false;
+      newState.pendingTactics = null;
       return newState;
     }
 

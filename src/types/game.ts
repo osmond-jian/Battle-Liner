@@ -6,10 +6,10 @@ export type CardType = 'troop' | 'tactic';
 export interface Card {
   id: string;
   type: CardType;
-  color?: CardColor; // Only for troop cards
-  value?: CardValue; // Only for troop cards
-  name?: string;     // For tactic cards (e.g. "Leader", "Scout", etc.)
-  effect?:string;
+  color?: CardColor;
+  value?: CardValue;
+  name?: string;
+  effect?: string;
 }
 
 export interface Formation {
@@ -23,21 +23,31 @@ export interface Flag {
     player: Formation;
     opponent: Formation;
   };
-  modifiers:string[];
+  modifiers: string[];
   winner: 'player' | 'opponent' | null;
 }
 
+/**
+ * Single canonical game state type used by the reducer, context, and all components.
+ * (Previously split across GameState and FullGameState — now unified.)
+ */
 export interface GameState {
-  gameStatus: 'no-game' | 'playing' | 'playerWon' | 'opponentWon';
-  opponentHand: Card[];
+  gameStatus: 'playing' | 'playerWon' | 'opponentWon';
   playerHand: Card[];
+  opponentHand: Card[];
   deck: Card[];
   tacticsDeck: Card[];
   flags: Flag[];
   selectedCard: Card | null;
   selectedFlag: number | null;
+  playerTacticsPlayed: number;
+  opponentTacticsPlayed: number;
   deserterActive: boolean;
   traitorActive: boolean;
+  redeployState: boolean;
+  leaderPending?: { card: Card; flagIndex: number };
+  companionPending?: { card: Card; flagIndex: number };
+  shieldPending?: { card: Card; flagIndex: number };
   pendingTraitor: { card: Card; fromFlag: number } | null;
   pendingTactics: { card: Card; flagIndex: number } | null;
   scoutDrawStep: {
@@ -46,5 +56,4 @@ export interface GameState {
     keep?: Card;
     discards?: Card[];
   } | null;
-  redeployState: boolean;
 }
