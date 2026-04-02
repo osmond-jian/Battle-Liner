@@ -2,6 +2,7 @@ import React from 'react';
 import { Flag as FlagType } from '../types/game';
 import { Card } from './Card';
 import type { Card as CardType } from '../types/game';
+import { getSlotCount } from '../utils/gameLogic';
 
 interface FlagProps {
   flag: FlagType;
@@ -44,7 +45,7 @@ export function Flag({
 
   const wonByPlayer   = flag.winner === 'player';
   const wonByOpponent = flag.winner === 'opponent';
-  const slots = flag.modifiers.includes('mud') ? 4 : 3;
+  const slots = getSlotCount(flag);
 
   return (
     <div

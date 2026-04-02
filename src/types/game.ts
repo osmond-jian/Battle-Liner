@@ -1,3 +1,5 @@
+export type TurnPhase = 'player' | 'opponent' | 'awaitingDraw';
+
 export type CardColor = 'red' | 'blue' | 'green' | 'orange' | 'purple' | 'yellow';
 export type CardValue = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 

@@ -4,6 +4,7 @@ import { RulesPopup } from './RulesPopup';
 
 interface LandingPageProps {
   onStart: () => void;
+  onMultiplayer: () => void;
   onContinue?: () => void;
   hasSave?: boolean;
   saveDate?: Date | null;
@@ -32,7 +33,7 @@ const highlights = [
   },
 ];
 
-export function LandingPage({ onStart, onContinue, hasSave, saveDate }: LandingPageProps) {
+export function LandingPage({ onStart, onMultiplayer, onContinue, hasSave, saveDate }: LandingPageProps) {
   const [showGuide, setShowGuide] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [rulesTab, setRulesTab] = useState<'rules' | 'tactics'>('rules');
@@ -77,7 +78,13 @@ export function LandingPage({ onStart, onContinue, hasSave, saveDate }: LandingP
             onClick={onStart}
             className="px-10 py-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-lg uppercase tracking-widest shadow-lg shadow-amber-500/30 transition-all hover:scale-105 active:scale-100"
           >
-            New Game
+            vs CPU
+          </button>
+          <button
+            onClick={onMultiplayer}
+            className="px-10 py-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-lg uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all hover:scale-105 active:scale-100"
+          >
+            Multiplayer
           </button>
           <button
             onClick={() => setShowRules(true)}

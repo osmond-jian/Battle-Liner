@@ -1,11 +1,11 @@
 import type { Card, CardColor, CardValue, GameState } from '../types/game';
-import type { TurnPhase } from '../hooks/useTurnManager';
-import { createTacticsDeck } from './gameLogic';
+import type { TurnPhase } from '../types/game';
+import { createTacticsDeck } from '../data/tacticCards';
 
 const STORAGE_KEY = 'battleline-save';
 const SAVE_VERSION = 1 as const;
 
-// ── Card codec ─────────────────────────────────────────────────────────────
+// ── Card codec (exported so urlGameState.ts can reuse) ────────────────────
 
 const COLOR_TO_CHAR: Record<string, string> = {
   red: 'r', blue: 'b', green: 'g', orange: 'o', purple: 'p', yellow: 'y',
@@ -25,7 +25,7 @@ const TACTIC_MASTER: Record<string, Card> = Object.fromEntries(
  *   Tactic (raw):         card.id          e.g.  "t1"
  *   Tactic (configured):  "{id}:{c}{v}"   e.g.  "t1:r7"
  */
-function encodeCard(card: Card): string {
+export function encodeCard(card: Card): string {
   if (card.type === 'troop') return card.id;
   if (card.color && card.value) {
     return `${card.id}:${COLOR_TO_CHAR[card.color]}${card.value}`;
@@ -36,7 +36,7 @@ function encodeCard(card: Card): string {
 /**
  * Decodes a compact string back to a Card object with all fields populated.
  */
-function decodeCard(encoded: string): Card {
+export function decodeCard(encoded: string): Card {
   if (encoded.startsWith('t')) {
     const [id, config] = encoded.split(':');
     const base = TACTIC_MASTER[id];

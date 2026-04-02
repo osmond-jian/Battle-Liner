@@ -1,16 +1,27 @@
 import type { Card, Flag } from '../types/game';
 import type { Move } from '../types/Move';
+import { getSlotCount, calculateFormationStrength } from '../utils/gameLogic';
 
 // ─── Formation scoring helpers ────────────────────────────────────────────────
 
 /**
  * Scores a completed or partial troop formation.
- * Returns 0 for < 2 valid cards. Penalises nothing — higher is better.
+ * Returns 0 for < 2 valid cards. Higher is better.
+ *
+ * For completed formations (3+ cards) delegates to the canonical
+ * calculateFormationStrength from gameLogic so the multipliers stay in sync.
+ * For partial (2-card) formations adds a heuristic potential bonus.
  */
 function scoreFormation(cards: Card[]): number {
   const valid = cards.filter(c => c.color !== undefined && c.value !== undefined);
   if (valid.length < 2) return 0;
 
+  // Completed formation — use the canonical scorer.
+  if (valid.length >= 3) {
+    return calculateFormationStrength(valid);
+  }
+
+  // Partial (2-card) formation — reward progress toward strong combinations.
   const sorted = [...valid].sort((a, b) => a.value! - b.value!);
   const sum = valid.reduce((acc, c) => acc + c.value!, 0);
 
@@ -18,21 +29,11 @@ function scoreFormation(cards: Card[]): number {
   const isStraight = sorted.every((c, i) => i === 0 || c.value! === sorted[i - 1].value! + 1);
   const isSameValue = valid.every(c => c.value === valid[0].value);
 
-  // Completed formation — mirrors the multipliers in gameLogic.ts
-  if (valid.length >= 3) {
-    if (isFlush && isStraight) return sum * 10000;
-    if (isSameValue)            return sum * 1000;
-    if (isFlush)                return sum * 100;
-    if (isStraight)             return sum * 10;
-    return sum;
-  }
-
-  // Partial (2-card) formation — reward progress toward strong combinations
-  let potential = sum * 2; // base: card values matter
-  if (isSameValue) potential += 60;  // likely phalanx
+  let potential = sum * 2;
+  if (isSameValue)           potential += 60; // likely phalanx
   if (isFlush && isStraight) potential += 50; // likely wedge
-  else if (isFlush)     potential += 25;
-  else if (isStraight)  potential += 20;
+  else if (isFlush)          potential += 25;
+  else if (isStraight)       potential += 20;
   return potential;
 }
 
@@ -64,7 +65,7 @@ export function useOpponentAI() {
       .map((f, i) => ({ flag: f, index: i }))
       .filter(({ flag }) => {
         if (flag.winner) return false;
-        const required = flag.modifiers.includes('mud') ? 4 : 3;
+        const required = getSlotCount(flag);
         return flag.formation.opponent.cards.length < required;
       });
 

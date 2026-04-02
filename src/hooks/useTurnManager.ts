@@ -1,12 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Dispatch } from 'react';
-import type { Card as CardType, CardColor, CardValue, GameState } from '../types/game';
+import type { Card as CardType, CardColor, CardValue, GameState, TurnPhase } from '../types/game';
 import type { GameAction } from '../engine/gameEngine';
 import type { Move } from '../types/Move';
 import { useOpponentAI } from './useOpponentAI';
+import { getSlotCount } from '../utils/gameLogic';
 import type { ActionToAnimate } from './useAnimateAction';
-
-export type TurnPhase = 'player' | 'opponent' | 'awaitingDraw';
 
 interface UseTurnManagerParams {
   gameState: GameState;
@@ -15,6 +14,8 @@ interface UseTurnManagerParams {
   setAnimatingAction: (action: 'PLAY_CARD' | 'DRAW_CARD' | null) => void;
   resetAnimations: () => void;
   initialTurnPhase?: TurnPhase;
+  /** When provided, fires instead of running the opponent AI (url-async multiplayer). */
+  onAsyncTurnEnd?: () => void;
 }
 
 /**
@@ -31,6 +32,7 @@ export function useTurnManager({
   setAnimatingAction,
   resetAnimations,
   initialTurnPhase,
+  onAsyncTurnEnd,
 }: UseTurnManagerParams) {
   const [currentTurn, setCurrentTurn] = useState<TurnPhase>(initialTurnPhase ?? 'player');
   const [playerMoveDraft, setPlayerMoveDraft] = useState<Partial<Move>>({});
@@ -121,12 +123,16 @@ export function useTurnManager({
       if (move.player === 'player') {
         const gs = gameStateRef.current;
         if (gs.deck.length === 0 && gs.tacticsDeck.length === 0) {
-          // Both decks exhausted — skip draw phase, hand off to opponent immediately.
+          // Both decks exhausted — skip draw phase.
           showToast('Both decks are empty — draw phase skipped.');
           setCurrentTurn('opponent');
-          const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
-          if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
-          else setCurrentTurn('player'); // opponent also has nothing to play
+          if (onAsyncTurnEnd) {
+            onAsyncTurnEnd();
+          } else {
+            const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
+            if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+            else setCurrentTurn('player');
+          }
         } else {
           setCurrentTurn('awaitingDraw');
         }
@@ -166,7 +172,7 @@ export function useTurnManager({
       (card.type === 'tactic' &&
         (card.name === 'Leader' || card.name === 'Companion Cavalry' || card.name === 'Shield Bearers'));
     if (occupiesSlot) {
-      const slots = flag.modifiers.includes('mud') ? 4 : 3;
+      const slots = getSlotCount(flag);
       if (flag.formation.player.cards.length >= slots) {
         showToast(`Flag ${flagIndex + 1} is already full — choose a different flag.`);
         dispatch({ type: 'SELECT_CARD', card: null });
@@ -208,13 +214,17 @@ export function useTurnManager({
 
     scheduleDrawAnim('player', deckType, () => {
       setCurrentTurn('opponent');
-      const gs = gameStateRef.current;
-      const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
-      if (oppMove) {
-        runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+      if (onAsyncTurnEnd) {
+        // URL-async multiplayer: notify GameManager to show the share modal.
+        onAsyncTurnEnd();
       } else {
-        // Opponent has no valid moves — skip their turn.
-        setCurrentTurn('player');
+        const gs = gameStateRef.current;
+        const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
+        if (oppMove) {
+          runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+        } else {
+          setCurrentTurn('player');
+        }
       }
     });
   }, [scheduleDrawAnim, getMove]);
@@ -319,6 +329,7 @@ export function useTurnManager({
   const turnMessage =
     currentTurn === 'player'       ? 'Play a card' :
     currentTurn === 'awaitingDraw' ? 'Draw a card from either the tactics or troop deck' :
+    onAsyncTurnEnd                 ? "Waiting for opponent's move\u2026" :
                                      "Opponent's turn...";
 
   return {

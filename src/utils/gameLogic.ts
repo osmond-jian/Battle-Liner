@@ -1,6 +1,11 @@
 import { Card, Flag, Formation } from '../types/game';
 import { CARD_COLORS, CARD_VALUES } from '../constants';
 
+/** Returns the number of card slots for a flag (4 with Mud modifier, 3 otherwise). */
+export function getSlotCount(flag: Flag): number {
+  return flag.modifiers.includes('mud') ? 4 : 3;
+}
+
 export const TOTAL_CARDS = CARD_COLORS.length * CARD_VALUES.length;
 
 export function createDeck(): Card[] {
@@ -11,9 +16,9 @@ export function createDeck(): Card[] {
         id: `${color}-${value}`,
         color,
         value,
-        type:"troop",
-        name:"none",
-        effect:"none",
+        type: 'troop',
+        name: 'none',
+        effect: 'none',
       });
     });
   });
@@ -34,10 +39,10 @@ export function createFlags(): Flag[] {
     id: i + 1,
     formation: {
       player: { cards: [], owner: null },
-      opponent: { cards: [], owner: null }
+      opponent: { cards: [], owner: null },
     },
-    modifiers:[],
-    winner: null
+    modifiers: [],
+    winner: null,
   }));
 }
 
@@ -57,6 +62,32 @@ function getCombinations(cards: Card[], size: number): Card[][] {
 }
 
 /**
+ * Calculates the formation strength of a set of cards.
+ * Requires at least 3 valid (colored, positive-value) cards — returns 0 otherwise.
+ * Exported so the AI scorer can delegate completed-formation scoring here.
+ */
+export function calculateFormationStrength(cards: Card[]): number {
+  const validCards = cards.filter(c => c.value != null && c.value > 0 && c.color != null);
+  if (validCards.length < 3) return 0;
+  const sortedCards = [...validCards].sort((a, b) => a.value! - b.value!);
+
+  const isFlush = validCards.every(card => card.color === validCards[0].color);
+  const isStraight = sortedCards.every((card, i) => {
+    if (i === 0) return true;
+    return card.value! === sortedCards[i - 1].value! + 1;
+  });
+  const isThreeOfKind = validCards.every(card => card.value === validCards[0].value);
+  const sum = validCards.reduce((acc, card) => acc + (card.value ?? 0), 0);
+
+  if (isFlush && isStraight) return sum * 10000; // Wedge
+  if (isThreeOfKind)         return sum * 1000;  // Phalanx
+  if (isFlush)               return sum * 100;   // Battalion Order
+  if (isStraight)            return sum * 10;    // Skirmish Line
+
+  return sum; // Host
+}
+
+/**
  * Returns true when no combination of `availableCards` can give `opponentFormation`
  * a higher formation strength than `completedFormation`. Used for normal (non-fog) flags.
  */
@@ -66,7 +97,7 @@ function opponentCannotWin(
   availableCards: Card[],
   requiredCards: number = 3
 ): boolean {
-  const completedStrength = calculateFormationStrength(completedFormation);
+  const completedStrength = calculateFormationStrength(completedFormation.cards);
   const needed = requiredCards - opponentFormation.cards.length;
 
   if (needed <= 0) return false;
@@ -74,11 +105,8 @@ function opponentCannotWin(
   const allOptions = getCombinations(availableCards, needed);
 
   for (const combo of allOptions) {
-    const hypothetical: Formation = {
-      cards: [...opponentFormation.cards, ...combo],
-      owner: opponentFormation.owner,
-    };
-    if (calculateFormationStrength(hypothetical) > completedStrength) {
+    const hypotheticalCards = [...opponentFormation.cards, ...combo];
+    if (calculateFormationStrength(hypotheticalCards) > completedStrength) {
       return false;
     }
   }
@@ -112,33 +140,6 @@ function opponentCannotWinFog(
   return true;
 }
 
-
-
-function calculateFormationStrength(formation: Formation): number {
-  // Only cards with both a color and a positive value count (excludes unconfigured tactic cards).
-  const validCards = formation.cards.filter(c => c.value != null && c.value > 0 && c.color != null);
-  // Need at least 3 valid cards to form any scoring hand.
-  if (validCards.length < 3) return 0;
-  const sortedCards = [...validCards].sort((a, b) => a.value! - b.value!);
-
-  //check for formations
-  const isFlush = validCards.every(card => card.color === validCards[0].color);
-  const isStraight = sortedCards.every((card, i) => {
-    if (i === 0) return true;
-    return card.value! === sortedCards[i - 1].value! + 1;
-  });
-  const isThreeOfKind = validCards.every(card => card.value === validCards[0].value);
-  const sum = validCards.reduce((acc, card) => acc + (card.value ?? 0), 0);  
-
-  // Apply multipliers for special combinations
-  if (isFlush && isStraight) return sum * 10000; // Straight flush
-  if (isThreeOfKind) return sum * 1000
-  if (isFlush) return sum * 100; // Flush
-  if (isStraight) return sum * 10; // Straight
-  
-  return sum;
-}
-
 export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] = [], playerHand: Card[] = []): 'player' | 'opponent' | null {
   if (flag.winner) return flag.winner;
 
@@ -148,7 +149,7 @@ export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] 
 
   const hasFog = flag.modifiers.includes('fog');
   // Mud requires 4 cards per side; applies independently of Fog.
-  const requiredCards = flag.modifiers.includes('mud') ? 4 : 3;
+  const requiredCards = getSlotCount(flag);
 
   // ── Both sides have completed their formation ──────────────────────────────
   if (playerCards.length === requiredCards && opponentCards.length === requiredCards) {
@@ -161,8 +162,8 @@ export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] 
       return null; // tie
     }
     // Normal: compare formation strength.
-    const ps = calculateFormationStrength(player);
-    const os = calculateFormationStrength(opponent);
+    const ps = calculateFormationStrength(playerCards);
+    const os = calculateFormationStrength(opponentCards);
     if (ps > os) return 'player';
     if (os > ps) return 'opponent';
     return null;
@@ -210,14 +211,13 @@ export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] 
   return null;
 }
 
-
 export function checkGameOver(flags: Flag[]): 'player' | 'opponent' | null {
   const playerFlags = flags.filter(flag => flag.winner === 'player').length;
   const opponentFlags = flags.filter(flag => flag.winner === 'opponent').length;
-  
+
   if (playerFlags >= 5) return 'player';
   if (opponentFlags >= 5) return 'opponent';
-  
+
   // Check for three adjacent flags
   for (let i = 0; i < flags.length - 2; i++) {
     if (
@@ -235,92 +235,9 @@ export function checkGameOver(flags: Flag[]): 'player' | 'opponent' | null {
       return 'opponent';
     }
   }
-  
+
   return null;
 }
 
-export function createTacticsDeck(): Card[] {
-  return [
-    {
-      id: 't1',
-      type: 'tactic',
-      name: 'Leader',
-      effect: 'wild',
-      color: undefined,
-      value: 0,
-    },
-    {
-      id: 't2',
-      type: 'tactic',
-      name: 'Leader',
-      effect: 'wild',
-      color: undefined,
-      value: 0,
-    },
-    {
-      id: 't3',
-      type: 'tactic',
-      name: 'Companion Cavalry',
-      effect: 'value8',
-      color: undefined,
-      value: 8,
-    },
-    {
-      id: 't4',
-      type: 'tactic',
-      name: 'Shield Bearers',
-      effect: 'value≤3',
-      color: undefined,
-      value: 3,
-    },
-    {
-      id: 't5',
-      type: 'tactic',
-      name: 'Fog',
-      effect: 'fog',
-      color: undefined,
-      value: 0,
-    },
-    {
-      id: 't6',
-      type: 'tactic',
-      name: 'Mud',
-      effect: 'mud',
-      color: undefined,
-      value: 0,
-    },
-    {
-      id: 't7',
-      type: 'tactic',
-      name: 'Scout',
-      effect: 'scout',
-      color: undefined,
-      value: 0,
-    },
-    {
-      id: 't8',
-      type: 'tactic',
-      name: 'Redeploy',
-      effect: 'redeploy',
-      color: undefined,
-      value: 0,
-    },
-    {
-      id: 't9',
-      type: 'tactic',
-      name: 'Deserter',
-      effect: 'deserter',
-      color: undefined,
-      value: 0,
-    },
-    {
-      id: 't10',
-      type: 'tactic',
-      name: 'Traitor',
-      effect: 'traitor',
-      color: undefined,
-      value: 0,
-    },
-  ];
-}
-
+// Re-exported from src/data/tacticCards.ts for backwards compatibility.
+export { createTacticsDeck } from '../data/tacticCards';

@@ -1,4 +1,4 @@
-import { useCallback, useReducer } from 'react';
+import { useCallback, useMemo, useReducer, useState } from 'react';
 import { reducer } from '../engine/gameEngine';
 import { createInitialState } from '../engine/initialState';
 import { GameContext } from '../context/GameContext';
@@ -7,13 +7,16 @@ import { useModalManager } from '../hooks/useModalManager';
 import { useTurnManager } from '../hooks/useTurnManager';
 import { GameBoard } from './GameBoard';
 import { saveGame, type LoadedSave } from '../utils/saveGame';
+import { encodeGameToUrl } from '../utils/urlGameState';
+import type { MultiplayerConfig } from '../types/multiplayer';
 
 interface GameManagerProps {
   onExit: () => void;
   initialState?: LoadedSave;
+  multiplayerConfig?: MultiplayerConfig;
 }
 
-export function GameManager({ onExit, initialState }: GameManagerProps) {
+export function GameManager({ onExit, initialState, multiplayerConfig }: GameManagerProps) {
   const [gameState, dispatch] = useReducer(
     reducer,
     undefined,
@@ -29,11 +32,34 @@ export function GameManager({ onExit, initialState }: GameManagerProps) {
     setAnimatingAction: animations.setAnimatingAction,
     resetAnimations: animations.resetAnimations,
     initialTurnPhase: initialState?.turnPhase,
+    onAsyncTurnEnd: isAsyncMultiplayer ? handleAsyncTurnEnd : undefined,
   });
 
   const handleSave = useCallback(() => {
     saveGame(gameState, turn.currentTurn);
   }, [gameState, turn.currentTurn]);
+
+  // ── URL-async multiplayer ────────────────────────────────────────────────
+  const isAsyncMultiplayer = multiplayerConfig?.transport === 'url-async';
+
+  const [showShareModal, setShowShareModal] = useState(false);
+
+  // Build the share URL: next player's name becomes currentTurnName.
+  const shareUrl = useMemo(() => {
+    if (!multiplayerConfig || !isAsyncMultiplayer) return '';
+    const nextTurnName = multiplayerConfig.currentTurnName === multiplayerConfig.hostName
+      ? multiplayerConfig.guestName
+      : multiplayerConfig.hostName;
+    return encodeGameToUrl(gameState, { ...multiplayerConfig, currentTurnName: nextTurnName });
+  }, [gameState, multiplayerConfig, isAsyncMultiplayer]);
+
+  const handleAsyncTurnEnd = useCallback(() => {
+    setShowShareModal(true);
+  }, []);
+
+  const handleShareModalDone = useCallback(() => {
+    setShowShareModal(false);
+  }, []);
 
   return (
     <GameContext.Provider value={{
@@ -75,6 +101,10 @@ export function GameManager({ onExit, initialState }: GameManagerProps) {
       closeRules: modals.closeRules,
       closeGuide: modals.closeGuide,
       closeStats: modals.closeStats,
+      multiplayerConfig,
+      showShareModal,
+      shareUrl,
+      onShareModalDone: handleShareModalDone,
     }}>
       <GameBoard />
     </GameContext.Provider>

@@ -8,6 +8,7 @@ import { CardFly } from './CardFly';
 import { Deck } from './Deck';
 import { DeckStats } from './DeckStats';
 import { DrawModal } from './DrawModal';
+import { ShareMoveModal } from './ShareMoveModal';
 import { Flag } from './Flag';
 import { FormationGuide } from './FormationGuide';
 import { RedeployModal } from './RedeployModal';
@@ -59,7 +60,18 @@ export function GameBoard() {
     closeGuide,
     closeStats,
     onExit,
+    multiplayerConfig,
+    showShareModal,
+    shareUrl,
+    onShareModalDone,
   } = useGameContext();
+
+  const isMultiplayer   = !!multiplayerConfig;
+  const isAsyncMP       = multiplayerConfig?.transport === 'url-async';
+  const playerName      = multiplayerConfig?.localPlayer.username ?? 'You';
+  const opponentName    = multiplayerConfig?.opponentName ?? 'CPU Bot';
+  // In url-async mode, 'opponent' phase means we're waiting for the other person's link.
+  const isWaitingForOpponent = isAsyncMP && currentTurn === 'opponent' && !showShareModal;
 
   // Track whether the victory modal has been dismissed so the board stays visible.
   const [victoryDismissed, setVictoryDismissed] = useState(false);
@@ -110,19 +122,23 @@ export function GameBoard() {
               {label}
             </button>
           ))}
-          <button
-            onClick={onSave}
-            disabled={currentTurn === 'opponent'}
-            className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Save
-          </button>
-          <button
-            onClick={handleNewGame}
-            className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold transition"
-          >
-            New Game
-          </button>
+          {!isMultiplayer && (
+            <button
+              onClick={onSave}
+              disabled={currentTurn === 'opponent'}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Save
+            </button>
+          )}
+          {!isMultiplayer && (
+            <button
+              onClick={handleNewGame}
+              className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold transition"
+            >
+              New Game
+            </button>
+          )}
           <button
             onClick={onExit}
             className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 border border-slate-700 transition"
@@ -147,7 +163,7 @@ export function GameBoard() {
 
         {/* Opponent row */}
         <div className="shrink-0 flex items-center gap-3">
-          <ProfileCard name="CPU Bot" isOpponent />
+          <ProfileCard name={opponentName} isOpponent />
           <div id="opponent-hand" className="flex-1 flex justify-center gap-1.5 flex-wrap">
             {gameState.opponentHand.map(card => (
               <motion.div
@@ -209,7 +225,7 @@ export function GameBoard() {
 
         {/* Player hand */}
         <div className="shrink-0 flex items-center gap-3">
-          <ProfileCard name="You" />
+          <ProfileCard name={playerName} />
           <div id="hand" className="flex-1 flex justify-center gap-1.5 flex-wrap">
             {gameState.playerHand.map(card => (
               <motion.div key={card.id} layout transition={{ layout: { duration: 0.25, ease: 'easeOut' } }}>
@@ -403,6 +419,35 @@ export function GameBoard() {
               className="text-xs px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition"
             >
               Main Menu
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── URL-async: share link after your turn ─────────────────── */}
+      {showShareModal && multiplayerConfig && (
+        <ShareMoveModal
+          shareUrl={shareUrl}
+          opponentName={opponentName}
+          onDone={onShareModalDone}
+        />
+      )}
+
+      {/* ── URL-async: waiting for opponent ───────────────────────── */}
+      {isWaitingForOpponent && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center pb-8 pointer-events-none">
+          <div className="bg-slate-800/95 border border-slate-600 rounded-2xl px-8 py-5 shadow-2xl text-center pointer-events-auto max-w-sm mx-4">
+            <p className="text-sm text-slate-300 mb-1">
+              Waiting for <span className="text-amber-400 font-semibold">{opponentName}</span> to play…
+            </p>
+            <p className="text-xs text-slate-500 mb-4">
+              They'll send you a new link when it's your turn.
+            </p>
+            <button
+              onClick={onExit}
+              className="text-xs px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition"
+            >
+              Back to Menu
             </button>
           </div>
         </div>
