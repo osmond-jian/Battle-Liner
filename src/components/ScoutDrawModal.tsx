@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { Card as CardType } from '../types/game';
 import { Card } from './Card';
 
@@ -25,6 +26,7 @@ export function ScoutDrawModal({
   onDiscardSelect,
 }: ScoutDrawModalProps) {
   const [minimized, setMinimized] = useState(false);
+  const backdropRef = useRef<HTMLDivElement>(null);
 
   const step =
     remaining > 0 ? 'draw'
@@ -51,8 +53,19 @@ export function ScoutDrawModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-6 text-white max-w-lg w-full space-y-4">
+    <div ref={backdropRef} className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+      <motion.div
+        drag
+        dragConstraints={backdropRef}
+        dragMomentum={false}
+        dragElastic={0}
+        className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl text-white max-w-lg w-full"
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-2 cursor-grab active:cursor-grabbing">
+          <div className="w-8 h-1 rounded-full bg-slate-600" />
+        </div>
+      <div className="p-6 space-y-4">
 
         {/* Header */}
         <div className="flex items-start justify-between">
@@ -151,6 +164,7 @@ export function ScoutDrawModal({
         )}
 
       </div>
+      </motion.div>
     </div>
   );
 }

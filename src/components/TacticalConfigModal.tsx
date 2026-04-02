@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { CardColor, CardValue } from '../types/game';
 import { CARD_COLORS } from '../constants';
 
@@ -21,9 +22,10 @@ const COLOR_STYLES: Record<CardColor, { bg: string; ring: string; label: string 
 };
 
 export function TacticsConfigModal({ cardName, onConfirm }: Props) {
-  const [minimized, setMinimized]     = useState(false);
+  const [minimized, setMinimized]         = useState(false);
   const [selectedColor, setSelectedColor] = useState<CardColor | null>(null);
   const [selectedValue, setSelectedValue] = useState<CardValue | null>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
 
   const isCompanion = cardName === 'Companion Cavalry';
   const isShield    = cardName === 'Shield Bearers';
@@ -57,8 +59,19 @@ export function TacticsConfigModal({ cardName, onConfirm }: Props) {
 
   // ── Full modal ────────────────────────────────────────────────────────────
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl p-6 w-full max-w-sm text-white space-y-5">
+    <div ref={backdropRef} className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <motion.div
+        drag
+        dragConstraints={backdropRef}
+        dragMomentum={false}
+        dragElastic={0}
+        className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-sm text-white"
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-2 cursor-grab active:cursor-grabbing">
+          <div className="w-8 h-1 rounded-full bg-slate-600" />
+        </div>
+      <div className="p-6 space-y-5">
 
         {/* Header */}
         <div className="flex items-start justify-between">
@@ -156,6 +169,7 @@ export function TacticsConfigModal({ cardName, onConfirm }: Props) {
           Confirm
         </button>
       </div>
+      </motion.div>
     </div>
   );
 }

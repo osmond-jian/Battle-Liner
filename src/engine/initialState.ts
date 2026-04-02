@@ -1,9 +1,9 @@
 import { GameState } from '../types/game';
-import { createDeck, createFlags, createTacticsDeck } from '../utils/gameLogic';
+import { createDeck, createFlags, createTacticsDeck, shuffleDeck } from '../utils/gameLogic';
 
 export function createInitialState(): GameState {
   const troopDeck = createDeck();
-  const tacticsDeck = createTacticsDeck();
+  const tacticsDeck = shuffleDeck(createTacticsDeck());
 
   const playerHand = troopDeck.slice(0, 7);
   const opponentHand = troopDeck.slice(7, 14);

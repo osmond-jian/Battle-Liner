@@ -3,9 +3,10 @@ import { motion } from 'framer-motion';
 interface VictoryModalProps {
   result: 'playerWon' | 'opponentWon';
   onPlayAgain: () => void;
+  onDismiss: () => void;
 }
 
-export function VictoryModal({ result, onPlayAgain }: VictoryModalProps) {
+export function VictoryModal({ result, onPlayAgain, onDismiss }: VictoryModalProps) {
   const playerWon = result === 'playerWon';
 
   return (
@@ -53,23 +54,31 @@ export function VictoryModal({ result, onPlayAgain }: VictoryModalProps) {
             : 'The enemy has broken through your defenses.'}
         </motion.p>
 
-        {/* Play Again */}
-        <motion.button
+        {/* Buttons */}
+        <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.6 }}
-          whileHover={{ scale: 1.06 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={onPlayAgain}
-          className={`
-            mt-2 px-8 py-3 rounded-xl font-bold text-lg shadow-lg transition-colors
-            ${playerWon
-              ? 'bg-yellow-400 hover:bg-yellow-300 text-black'
-              : 'bg-red-600 hover:bg-red-500 text-white'}
-          `}
+          className="flex flex-col gap-3 w-full mt-2"
         >
-          Play Again
-        </motion.button>
+          <button
+            onClick={onPlayAgain}
+            className={`
+              px-8 py-3 rounded-xl font-bold text-lg shadow-lg transition-colors hover:scale-105 active:scale-100
+              ${playerWon
+                ? 'bg-yellow-400 hover:bg-yellow-300 text-black'
+                : 'bg-red-600 hover:bg-red-500 text-white'}
+            `}
+          >
+            Play Again
+          </button>
+          <button
+            onClick={onDismiss}
+            className="px-8 py-3 rounded-xl font-semibold text-base bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 transition-colors"
+          >
+            Inspect Board
+          </button>
+        </motion.div>
       </motion.div>
     </div>
   );

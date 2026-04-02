@@ -4,6 +4,9 @@ import { RulesPopup } from './RulesPopup';
 
 interface LandingPageProps {
   onStart: () => void;
+  onContinue?: () => void;
+  hasSave?: boolean;
+  saveDate?: Date | null;
 }
 
 const highlights = [
@@ -29,9 +32,10 @@ const highlights = [
   },
 ];
 
-export function LandingPage({ onStart }: LandingPageProps) {
+export function LandingPage({ onStart, onContinue, hasSave, saveDate }: LandingPageProps) {
   const [showGuide, setShowGuide] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [rulesTab, setRulesTab] = useState<'rules' | 'tactics'>('rules');
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
@@ -54,11 +58,26 @@ export function LandingPage({ onStart }: LandingPageProps) {
 
         {/* CTA buttons */}
         <div className="flex flex-col sm:flex-row gap-3 mt-2">
+          {hasSave && onContinue && (
+            <div className="flex flex-col items-center gap-1">
+              <button
+                onClick={onContinue}
+                className="px-10 py-4 rounded-xl bg-green-600 hover:bg-green-500 text-white font-black text-lg uppercase tracking-widest shadow-lg shadow-green-500/30 transition-all hover:scale-105 active:scale-100"
+              >
+                Continue
+              </button>
+              {saveDate && (
+                <span className="text-xs text-slate-500">
+                  {saveDate.toLocaleDateString()} {saveDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          )}
           <button
             onClick={onStart}
             className="px-10 py-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-lg uppercase tracking-widest shadow-lg shadow-amber-500/30 transition-all hover:scale-105 active:scale-100"
           >
-            Start Game
+            New Game
           </button>
           <button
             onClick={() => setShowRules(true)}
@@ -97,7 +116,13 @@ export function LandingPage({ onStart }: LandingPageProps) {
       </div>
 
       {showGuide && <FormationGuide onClose={() => setShowGuide(false)} />}
-      {showRules  && <RulesPopup    onClose={() => setShowRules(false)}  />}
+      {showRules && (
+        <RulesPopup
+          onClose={() => setShowRules(false)}
+          activeTab={rulesTab}
+          onTabChange={setRulesTab}
+        />
+      )}
     </div>
   );
 }

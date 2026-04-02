@@ -1,50 +1,133 @@
-import { Flag } from '../types/game';
+import { useState, useRef } from 'react';
+import { motion } from 'framer-motion';
+import { Flag as FlagType } from '../types/game';
+import { Card } from './Card';
 
 interface TraitorPlaceModalProps {
-  flags: Flag[];
+  flags: FlagType[];
   fromFlagIndex: number;
   onPlace: (toFlagIndex: number) => void;
 }
 
 export function TraitorPlaceModal({ flags, fromFlagIndex, onPlace }: TraitorPlaceModalProps) {
+  const [minimized, setMinimized] = useState(false);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
   const validFlags = flags
     .map((f, i) => ({ flag: f, index: i }))
-    .filter(({ flag, index }) => {
+    .filter(({ flag }) => {
       if (flag.winner) return false;
-      if (index === fromFlagIndex) return false;
       const slots = flag.modifiers.includes('mud') ? 4 : 3;
       return flag.formation.player.cards.length < slots;
     });
 
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 border border-slate-700 p-6 rounded-xl shadow-2xl text-white max-w-md w-full">
-        <h2 className="text-lg font-bold text-amber-400 mb-1">Place the captured card</h2>
-        <p className="text-sm text-slate-400 mb-4">Choose a flag to add the card to your formation.</p>
-
-        {validFlags.length === 0 ? (
-          <p className="text-sm text-slate-400 italic">
-            No valid flags available — all flags are either won or full.
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {validFlags.map(({ flag, index: i }) => {
-              const slots = flag.modifiers.includes('mud') ? 4 : 3;
-              const used = flag.formation.player.cards.length;
-              return (
-                <button
-                  key={i}
-                  onClick={() => onPlace(i)}
-                  className="px-4 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-sm font-semibold border border-amber-500 transition"
-                >
-                  Flag {i + 1}
-                  <span className="ml-1.5 text-xs text-amber-300">({used}/{slots})</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+  if (minimized) {
+    return (
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+        <button
+          onClick={() => setMinimized(false)}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-amber-700 text-white font-bold text-sm shadow-xl hover:bg-amber-600 transition border border-amber-500"
+        >
+          <span>⇄</span>
+          <span>Traitor — choose a flag to place the card · tap to resume</span>
+        </button>
       </div>
+    );
+  }
+
+  return (
+    <div ref={backdropRef} className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <motion.div
+        drag
+        dragConstraints={backdropRef}
+        dragMomentum={false}
+        dragElastic={0}
+        className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-3xl text-white"
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-2 cursor-grab active:cursor-grabbing">
+          <div className="w-8 h-1 rounded-full bg-slate-600" />
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Header */}
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-amber-400">⇄ Traitor — Place</h2>
+              <p className="text-sm text-slate-400 mt-0.5">Click an empty slot to add the captured card to your formation.</p>
+            </div>
+            <button
+              onClick={() => setMinimized(true)}
+              className="ml-3 px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs border border-slate-600 transition shrink-0"
+            >
+              View Board
+            </button>
+          </div>
+
+          {validFlags.length === 0 ? (
+            <p className="text-sm text-slate-400 italic py-4 text-center">
+              No valid flags available — all are won or full.
+            </p>
+          ) : (
+            <div className="overflow-x-auto pb-1">
+              <div className="flex gap-1 min-w-max">
+                {validFlags.map(({ flag, index: flagIndex }) => {
+                  const slots = flag.modifiers.includes('mud') ? 4 : 3;
+                  const wonByPlayer = flag.winner === 'player';
+                  const wonByOpp   = flag.winner === 'opponent';
+
+                  return (
+                    <div
+                      key={flag.id}
+                      className="flex flex-col items-center gap-0.5 px-1 py-2 rounded-xl w-[84px] shrink-0 bg-slate-900/40 ring-1 ring-amber-600/40"
+                    >
+                      {/* Opponent cards (top, non-interactive) */}
+                      <div className="flex flex-col items-center gap-0.5 w-full">
+                        {Array.from({ length: slots }).map((_, si) => {
+                          const card = flag.formation.opponent.cards[si];
+                          return card
+                            ? <Card key={card.id} card={card} condensed className="opacity-50" />
+                            : <div key={si} className="w-full h-7 rounded border border-dashed border-white/5" />;
+                        })}
+                      </div>
+
+                      {/* Flag pole & banner */}
+                      <div className="flex flex-col items-center my-1">
+                        <div className={`
+                          w-10 rounded-t-sm py-0.5 flex items-center justify-center text-[11px] font-bold
+                          ${wonByPlayer ? 'bg-emerald-500 text-white' : wonByOpp ? 'bg-red-600 text-white' : 'bg-slate-600 text-slate-200'}
+                        `}>
+                          {wonByPlayer ? '✔' : wonByOpp ? '✘' : flagIndex + 1}
+                        </div>
+                        <div className={`w-1.5 rounded-full ${wonByPlayer ? 'bg-emerald-400' : wonByOpp ? 'bg-red-500' : 'bg-slate-500'}`} style={{ height: '24px' }} />
+                        <div className={`w-6 h-1.5 rounded-full ${wonByPlayer ? 'bg-emerald-600' : wonByOpp ? 'bg-red-700' : 'bg-slate-600'}`} />
+                      </div>
+
+                      {/* Player slots — empty ones are clickable placement targets */}
+                      <div className="flex flex-col items-center gap-0.5 w-full">
+                        {Array.from({ length: slots }).map((_, si) => {
+                          const card = flag.formation.player.cards[si];
+                          if (card) return <Card key={card.id} card={card} condensed />;
+                          // Empty slot = valid placement
+                          return (
+                            <button
+                              key={si}
+                              onClick={() => onPlace(flagIndex)}
+                              className="w-full h-7 rounded border border-amber-500/60 bg-amber-900/20 text-amber-400 text-[10px] font-semibold hover:bg-amber-800/40 hover:border-amber-400 transition-all cursor-pointer animate-pulse"
+                            >
+                              +
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </motion.div>
     </div>
   );
 }

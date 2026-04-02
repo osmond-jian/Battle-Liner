@@ -12,6 +12,7 @@ interface GameContextValue {
   // Turn info
   currentTurn: TurnPhase;
   turnMessage: string;
+  toastMessage: string | null;
 
   // Player interactions
   handleCardClick: (card: CardType) => void;
@@ -26,6 +27,10 @@ interface GameContextValue {
   handleTacticsConfigConfirm: (color: string, value: number) => void;
   handleTacticsCancel: () => void;
   handleTraitorPlace: (toFlagIndex: number) => void;
+  handleCardDrop: (card: CardType, flagIndex: number) => void;
+  handleSwapCards: (fromId: string, toId: string) => void;
+  handleSortHand: (mode: 'value' | 'color') => void;
+  handleSave: () => void;
 
   // Animation state (read by GameBoard to render CardFly)
   flyingCard: CardType | null;
@@ -41,6 +46,8 @@ interface GameContextValue {
   showRules: boolean;
   showGuide: boolean;
   showStats: boolean;
+  rulesTab: 'rules' | 'tactics';
+  setRulesTab: (tab: 'rules' | 'tactics') => void;
   openRules: () => void;
   openGuide: () => void;
   openStats: () => void;

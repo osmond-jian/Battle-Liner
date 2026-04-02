@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Dispatch } from 'react';
 import type { Card as CardType, CardColor, CardValue, GameState } from '../types/game';
 import type { GameAction } from '../engine/gameEngine';
@@ -14,6 +14,7 @@ interface UseTurnManagerParams {
   animate: (action: ActionToAnimate, onComplete: () => void) => void;
   setAnimatingAction: (action: 'PLAY_CARD' | 'DRAW_CARD' | null) => void;
   resetAnimations: () => void;
+  initialTurnPhase?: TurnPhase;
 }
 
 /**
@@ -29,9 +30,21 @@ export function useTurnManager({
   animate,
   setAnimatingAction,
   resetAnimations,
+  initialTurnPhase,
 }: UseTurnManagerParams) {
-  const [currentTurn, setCurrentTurn] = useState<TurnPhase>('player');
+  const [currentTurn, setCurrentTurn] = useState<TurnPhase>(initialTurnPhase ?? 'player');
   const [playerMoveDraft, setPlayerMoveDraft] = useState<Partial<Move>>({});
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastMessage(msg);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), 3500);
+  }, []);
+
+  // Cleanup timer on unmount.
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
 
   // Always-fresh ref to gameState so async callbacks never read stale closures.
   const gameStateRef = useRef(gameState);
@@ -106,12 +119,22 @@ export function useTurnManager({
     setCurrentTurn(move.player);
     updateGameBoard(move, () => {
       if (move.player === 'player') {
-        setCurrentTurn('awaitingDraw');
+        const gs = gameStateRef.current;
+        if (gs.deck.length === 0 && gs.tacticsDeck.length === 0) {
+          // Both decks exhausted — skip draw phase, hand off to opponent immediately.
+          showToast('Both decks are empty — draw phase skipped.');
+          setCurrentTurn('opponent');
+          const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
+          if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+          else setCurrentTurn('player'); // opponent also has nothing to play
+        } else {
+          setCurrentTurn('awaitingDraw');
+        }
       } else {
         drawPhase('opponent', move.action);
       }
     });
-  }, [updateGameBoard, drawPhase]);
+  }, [updateGameBoard, drawPhase, getMove, showToast]);
 
   // Keep ref fresh every render (avoids circular useCallback dependency in closures).
   runTurnRef.current = runTurn;
@@ -125,14 +148,42 @@ export function useTurnManager({
 
   const finalizeMoveRequest = useCallback((draft: Partial<Move>) => {
     if (!draft.card || draft.flagIndex == null) return;
+    if (currentTurnRef.current !== 'player') return;
+    const { card, flagIndex } = draft;
+    const flag = gameStateRef.current.flags[flagIndex];
+
+    // Validate: won flag — no card may be played there.
+    if (flag.winner) {
+      showToast(`Flag ${flagIndex + 1} is already captured — choose a different flag.`);
+      dispatch({ type: 'SELECT_CARD', card: null });
+      dispatch({ type: 'SELECT_FLAG', flagIndex: null });
+      setPlayerMoveDraft({});
+      return;
+    }
+
+    // Validate: full flag — troop cards and wild tactic cards that occupy a slot.
+    const occupiesSlot = card.type === 'troop' ||
+      (card.type === 'tactic' &&
+        (card.name === 'Leader' || card.name === 'Companion Cavalry' || card.name === 'Shield Bearers'));
+    if (occupiesSlot) {
+      const slots = flag.modifiers.includes('mud') ? 4 : 3;
+      if (flag.formation.player.cards.length >= slots) {
+        showToast(`Flag ${flagIndex + 1} is already full — choose a different flag.`);
+        dispatch({ type: 'SELECT_CARD', card: null });
+        dispatch({ type: 'SELECT_FLAG', flagIndex: null });
+        setPlayerMoveDraft({});
+        return;
+      }
+    }
+
     runTurnRef.current({
       player: 'player',
-      action: draft.card.type === 'tactic' ? 'useTactic' : 'playCard',
-      card: draft.card,
-      flagIndex: draft.flagIndex,
+      action: card.type === 'tactic' ? 'useTactic' : 'playCard',
+      card,
+      flagIndex,
     });
     setPlayerMoveDraft({});
-  }, []);
+  }, [dispatch, showToast]);
 
   const handleFlagClick = useCallback((flagIndex: number) => {
     if (gameStateRef.current.pendingTraitor) {
@@ -157,12 +208,14 @@ export function useTurnManager({
 
     scheduleDrawAnim('player', deckType, () => {
       setCurrentTurn('opponent');
-      const oppMove = getMove(
-        gameStateRef.current.opponentHand,
-        gameStateRef.current.flags,
-        gameStateRef.current.deck,
-      );
-      if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+      const gs = gameStateRef.current;
+      const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
+      if (oppMove) {
+        runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+      } else {
+        // Opponent has no valid moves — skip their turn.
+        setCurrentTurn('player');
+      }
     });
   }, [scheduleDrawAnim, getMove]);
 
@@ -249,6 +302,19 @@ export function useTurnManager({
     dispatch({ type: 'TRAITOR_PLACE', toFlagIndex });
   }, [dispatch]);
 
+  // Direct card+flag drop (used by drag-to-flag gesture; bypasses playerMoveDraft state).
+  const handleCardDrop = useCallback((card: CardType, flagIndex: number) => {
+    finalizeMoveRequest({ card, flagIndex });
+  }, [finalizeMoveRequest]);
+
+  const handleSwapCards = useCallback((fromId: string, toId: string) => {
+    dispatch({ type: 'REORDER_HAND', fromId, toId });
+  }, [dispatch]);
+
+  const handleSortHand = useCallback((mode: 'value' | 'color') => {
+    dispatch({ type: 'SORT_HAND', mode });
+  }, [dispatch]);
+
   // --- Turn message ---
   const turnMessage =
     currentTurn === 'player'       ? 'Play a card' :
@@ -258,6 +324,7 @@ export function useTurnManager({
   return {
     currentTurn,
     turnMessage,
+    toastMessage,
     handleCardClick,
     handleFlagClick,
     handleDeckDraw,
@@ -270,5 +337,8 @@ export function useTurnManager({
     handleTacticsConfigConfirm,
     handleTacticsCancel,
     handleTraitorPlace,
+    handleCardDrop,
+    handleSwapCards,
+    handleSortHand,
   };
 }

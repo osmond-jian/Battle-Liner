@@ -139,7 +139,7 @@ function calculateFormationStrength(formation: Formation): number {
   return sum;
 }
 
-export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] = []): 'player' | 'opponent' | null {
+export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] = [], playerHand: Card[] = []): 'player' | 'opponent' | null {
   if (flag.winner) return flag.winner;
 
   const { player, opponent } = flag.formation;
@@ -172,8 +172,10 @@ export function checkWinner(flag: Flag, deck: Card[] = [], opponentHand: Card[] 
   // Only consider troop cards when determining what the incomplete side could
   // still draw — unconfigured tactic cards have unknown future values and would
   // corrupt the combination scoring if included.
+  // When checking early wins, each side's "reachable" cards are:
+  //   deck cards + that side's current hand (cards they could still play to this flag).
   const troopPool = [...deck, ...opponentHand].filter(c => c.type === 'troop');
-  const playerTroopPool = deck.filter(c => c.type === 'troop');
+  const playerTroopPool = [...deck, ...playerHand].filter(c => c.type === 'troop');
 
   if (hasFog) {
     if (playerCards.length === requiredCards && opponentCards.length < requiredCards) {

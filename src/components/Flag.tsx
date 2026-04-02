@@ -49,6 +49,7 @@ export function Flag({
   return (
     <div
       id={`flag-${flagIndex}`}
+      data-flag-index={flagIndex}
       onClick={handleClick}
       className={`
         flex flex-col items-center gap-1 px-1 py-2 rounded-xl cursor-pointer select-none w-[88px]

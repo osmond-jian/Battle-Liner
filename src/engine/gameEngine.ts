@@ -25,7 +25,9 @@ export type GameAction =
   | { type: 'SET_COMPANION_CARD'; color: Card['color']; value: Card['value'] }
   | { type: 'SET_SHIELD_BEARERS_CARD'; color: Card['color']; value: Card['value'] }
   | { type: 'CANCEL_TACTIC_CONFIG' }
-  | { type: 'REDEPLOY_DISCARD'; sourceFlagIndex: number; cardIndex: number };
+  | { type: 'REDEPLOY_DISCARD'; sourceFlagIndex: number; cardIndex: number }
+  | { type: 'REORDER_HAND'; fromId: string; toId: string }
+  | { type: 'SORT_HAND'; mode: 'value' | 'color' };
 
 
 export function reducer(state: GameState, action: GameAction): GameState {
@@ -59,7 +61,7 @@ export function reducer(state: GameState, action: GameAction): GameState {
       }
 
       // Only check for winner if player played the card (optional: also for opponent if needed)
-      const winner = checkWinner(flag, newState.deck, newState.opponentHand);
+      const winner = checkWinner(flag, newState.deck, newState.opponentHand, newState.playerHand);
       if (winner) {
         flag.winner = winner;
       }
@@ -155,6 +157,11 @@ export function reducer(state: GameState, action: GameAction): GameState {
 
     case 'APPLY_TACTIC': {
       const flag = newState.flags[action.flagIndex];
+
+      // Fog and Mud cannot be applied to already-won flags — guard before consuming the card.
+      if (flag.winner && (action.card.name === 'Fog' || action.card.name === 'Mud')) {
+        return newState;
+      }
 
       // Remove from hand
       newState.playerHand = newState.playerHand.filter(c => c.id !== action.card.id);
@@ -277,7 +284,7 @@ export function reducer(state: GameState, action: GameAction): GameState {
       newState.pendingTraitor = null;
       newState.pendingTactics = null;
       // Check whether moving the card wins the target flag or the game.
-      const traitorWinner = checkWinner(targetFlag, newState.deck, newState.opponentHand);
+      const traitorWinner = checkWinner(targetFlag, newState.deck, newState.opponentHand, newState.playerHand);
       if (traitorWinner) targetFlag.winner = traitorWinner;
       const traitorGameWinner = checkGameOver(newState.flags);
       if (traitorGameWinner) newState.gameStatus = traitorGameWinner === 'player' ? 'playerWon' : 'opponentWon';
@@ -295,7 +302,7 @@ export function reducer(state: GameState, action: GameAction): GameState {
       leaderFlag.formation.player.cards.push(modifiedCard);
       newState.leaderPending = undefined;
       newState.pendingTactics = null;
-      const leaderFlagWinner = checkWinner(leaderFlag, newState.deck, newState.opponentHand);
+      const leaderFlagWinner = checkWinner(leaderFlag, newState.deck, newState.opponentHand, newState.playerHand);
       if (leaderFlagWinner) leaderFlag.winner = leaderFlagWinner;
       const leaderGameWinner = checkGameOver(newState.flags);
       if (leaderGameWinner) newState.gameStatus = leaderGameWinner === 'player' ? 'playerWon' : 'opponentWon';
@@ -310,7 +317,7 @@ export function reducer(state: GameState, action: GameAction): GameState {
       companionFlag.formation.player.cards.push(modifiedCard);
       newState.companionPending = undefined;
       newState.pendingTactics = null;
-      const companionFlagWinner = checkWinner(companionFlag, newState.deck, newState.opponentHand);
+      const companionFlagWinner = checkWinner(companionFlag, newState.deck, newState.opponentHand, newState.playerHand);
       if (companionFlagWinner) companionFlag.winner = companionFlagWinner;
       const companionGameWinner = checkGameOver(newState.flags);
       if (companionGameWinner) newState.gameStatus = companionGameWinner === 'player' ? 'playerWon' : 'opponentWon';
@@ -325,7 +332,7 @@ export function reducer(state: GameState, action: GameAction): GameState {
       shieldFlag.formation.player.cards.push(modifiedCard);
       newState.shieldPending = undefined;
       newState.pendingTactics = null;
-      const shieldFlagWinner = checkWinner(shieldFlag, newState.deck, newState.opponentHand);
+      const shieldFlagWinner = checkWinner(shieldFlag, newState.deck, newState.opponentHand, newState.playerHand);
       if (shieldFlagWinner) shieldFlag.winner = shieldFlagWinner;
       const shieldGameWinner = checkGameOver(newState.flags);
       if (shieldGameWinner) newState.gameStatus = shieldGameWinner === 'player' ? 'playerWon' : 'opponentWon';
@@ -355,6 +362,33 @@ export function reducer(state: GameState, action: GameAction): GameState {
       return newState;
     }
 
+
+    case 'REORDER_HAND': {
+      const fi = newState.playerHand.findIndex(c => c.id === action.fromId);
+      const ti = newState.playerHand.findIndex(c => c.id === action.toId);
+      if (fi >= 0 && ti >= 0) {
+        [newState.playerHand[fi], newState.playerHand[ti]] =
+          [newState.playerHand[ti], newState.playerHand[fi]];
+      }
+      return newState;
+    }
+
+    case 'SORT_HAND': {
+      const colorOrder = ['red', 'blue', 'green', 'orange', 'purple', 'yellow'];
+      const troops  = newState.playerHand.filter(c => c.type === 'troop');
+      const tactics = newState.playerHand.filter(c => c.type === 'tactic');
+      if (action.mode === 'value') {
+        troops.sort((a, b) => (a.value ?? 0) - (b.value ?? 0));
+      } else {
+        troops.sort((a, b) => {
+          const ci = colorOrder.indexOf(a.color ?? '');
+          const cj = colorOrder.indexOf(b.color ?? '');
+          return ci !== cj ? ci - cj : (a.value ?? 0) - (b.value ?? 0);
+        });
+      }
+      newState.playerHand = [...troops, ...tactics];
+      return newState;
+    }
 
     default:
       return newState;

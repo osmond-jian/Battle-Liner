@@ -8,11 +8,15 @@ export function useModalManager() {
   const [showRules, setShowRules] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  // Persists which rules tab was last active so reopening remembers it.
+  const [rulesTab, setRulesTab] = useState<'rules' | 'tactics'>('rules');
 
   return {
     showRules,
     showGuide,
     showStats,
+    rulesTab,
+    setRulesTab,
     openRules: () => setShowRules(true),
     openGuide: () => setShowGuide(true),
     openStats: () => setShowStats(true),

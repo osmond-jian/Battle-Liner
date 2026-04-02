@@ -1,11 +1,13 @@
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGameContext } from '../context/GameContext';
 import type { Flag as FlagType } from '../types/game';
-import { Card } from './Card';
+import { DraggableCard } from './DraggableCard';
 import { CardBack } from './CardBack';
 import { CardFly } from './CardFly';
 import { Deck } from './Deck';
 import { DeckStats } from './DeckStats';
+import { DrawModal } from './DrawModal';
 import { Flag } from './Flag';
 import { FormationGuide } from './FormationGuide';
 import { RedeployModal } from './RedeployModal';
@@ -35,6 +37,11 @@ export function GameBoard() {
     handleTacticsConfigConfirm,
     handleTacticsCancel,
     handleTraitorPlace,
+    handleCardDrop,
+    handleSwapCards,
+    handleSortHand,
+    handleSave,
+    toastMessage,
     flyingCard,
     flyFrom,
     flyTo,
@@ -43,6 +50,8 @@ export function GameBoard() {
     showRules,
     showGuide,
     showStats,
+    rulesTab,
+    setRulesTab,
     openRules,
     openGuide,
     openStats,
@@ -52,8 +61,33 @@ export function GameBoard() {
     onExit,
   } = useGameContext();
 
-  const canDrawTroop  = currentTurn === 'awaitingDraw' && gameState.deck.length > 0;
-  const canDrawTactic = currentTurn === 'awaitingDraw' && gameState.tacticsDeck.length > 0;
+  // Track whether the victory modal has been dismissed so the board stays visible.
+  const [victoryDismissed, setVictoryDismissed] = useState(false);
+  useEffect(() => {
+    if (gameState.gameStatus === 'playing') setVictoryDismissed(false);
+  }, [gameState.gameStatus]);
+
+  // Local "Saved!" toast
+  const [saveToast, setSaveToast] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onSave = () => {
+    handleSave();
+    setSaveToast(true);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setSaveToast(false), 2000);
+  };
+
+  // Show the draw modal when the player must draw and no tactic resolution is pending.
+  const showDrawModal =
+    currentTurn === 'awaitingDraw' &&
+    !gameState.scoutDrawStep &&
+    !gameState.pendingTactics &&
+    !gameState.pendingTraitor &&
+    !gameState.leaderPending &&
+    !gameState.companionPending &&
+    !gameState.shieldPending &&
+    gameState.gameStatus === 'playing';
 
   return (
     <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
@@ -76,6 +110,13 @@ export function GameBoard() {
               {label}
             </button>
           ))}
+          <button
+            onClick={onSave}
+            disabled={currentTurn === 'opponent'}
+            className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Save
+          </button>
           <button
             onClick={handleNewGame}
             className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold transition"
@@ -109,7 +150,12 @@ export function GameBoard() {
           <ProfileCard name="CPU Bot" isOpponent />
           <div id="opponent-hand" className="flex-1 flex justify-center gap-1.5 flex-wrap">
             {gameState.opponentHand.map(card => (
-              <motion.div key={card.id} layout transition={{ layout: { duration: 0.25, ease: 'easeOut' } }}>
+              <motion.div
+                key={card.id}
+                layout
+                transition={{ layout: { duration: 0.25, ease: 'easeOut' } }}
+                whileHover={{ y: -8, transition: { duration: 0.15 } }}
+              >
                 <CardBack
                   id={`opponent-card-${card.id}`}
                   variant="troop"
@@ -148,48 +194,16 @@ export function GameBoard() {
           </div>
         </div>
 
-        {/* Deck strip — both decks centered below flags */}
-        <div className="shrink-0 flex justify-center items-start gap-10">
-
-          {/* Troop deck */}
-          <div id="deck-troop" className="flex flex-col items-center gap-1.5">
+        {/* Deck strip — both decks centered below flags (draw is handled by DrawModal) */}
+        <div className="shrink-0 flex justify-center items-center gap-10">
+          <div id="deck-troop" className="flex flex-col items-center gap-1">
             <Deck cardsRemaining={gameState.deck.length} variant="troop" />
-            <button
-              onClick={() => handleDeckDraw('troop')}
-              disabled={!canDrawTroop}
-              className={`
-                text-xs px-4 py-1.5 rounded-lg font-semibold border transition w-full
-                ${canDrawTroop
-                  ? 'bg-blue-700 hover:bg-blue-600 border-blue-500 text-white shadow-sm shadow-blue-500/20'
-                  : 'bg-slate-800 border-slate-700 text-slate-600 cursor-not-allowed'}
-              `}
-            >
-              Draw Troop
-            </button>
+            <span className="text-[10px] text-slate-600 uppercase tracking-widest">Troops</span>
           </div>
-
-          {/* Divider */}
-          <div className="flex flex-col items-center justify-center gap-1 pt-8 text-slate-700 select-none">
-            <div className="w-px h-8 bg-slate-800" />
-            <span className="text-[10px] uppercase tracking-widest text-slate-600">or</span>
-            <div className="w-px h-8 bg-slate-800" />
-          </div>
-
-          {/* Tactics deck */}
-          <div id="deck-tactic" className="flex flex-col items-center gap-1.5">
+          <div className="w-px h-10 bg-slate-800" />
+          <div id="deck-tactic" className="flex flex-col items-center gap-1">
             <Deck cardsRemaining={gameState.tacticsDeck.length} variant="tactic" />
-            <button
-              onClick={() => handleDeckDraw('tactic')}
-              disabled={!canDrawTactic}
-              className={`
-                text-xs px-4 py-1.5 rounded-lg font-semibold border transition w-full
-                ${canDrawTactic
-                  ? 'bg-amber-600 hover:bg-amber-500 border-amber-400 text-white shadow-sm shadow-amber-500/20'
-                  : 'bg-slate-800 border-slate-700 text-slate-600 cursor-not-allowed'}
-              `}
-            >
-              Draw Tactic
-            </button>
+            <span className="text-[10px] text-slate-600 uppercase tracking-widest">Tactics</span>
           </div>
         </div>
 
@@ -199,18 +213,32 @@ export function GameBoard() {
           <div id="hand" className="flex-1 flex justify-center gap-1.5 flex-wrap">
             {gameState.playerHand.map(card => (
               <motion.div key={card.id} layout transition={{ layout: { duration: 0.25, ease: 'easeOut' } }}>
-                <Card
-                  id={`player-card-${card.id}`}
+                <DraggableCard
                   card={card}
-                  onClick={() => handleCardClick(card)}
                   selected={gameState.selectedCard?.id === card.id}
+                  onCardClick={() => handleCardClick(card)}
+                  onDropOnFlag={handleCardDrop}
+                  onDropOnCard={handleSwapCards}
                 />
               </motion.div>
             ))}
           </div>
-          {/* Spacer mirrors the Deck Stats button width so hand stays centered */}
-          <div className="text-xs px-2.5 py-1.5 opacity-0 pointer-events-none select-none shrink-0">
-            Deck Stats
+          {/* Auto-sort controls */}
+          <div className="flex flex-col gap-1 shrink-0">
+            <button
+              onClick={() => handleSortHand('value')}
+              title="Sort hand by card value"
+              className="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition"
+            >
+              ↑ Value
+            </button>
+            <button
+              onClick={() => handleSortHand('color')}
+              title="Sort hand by color, then value"
+              className="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition"
+            >
+              ⬛ Color
+            </button>
           </div>
         </div>
 
@@ -219,6 +247,13 @@ export function GameBoard() {
       {/* ── Flying card animation ─────────────────────────────────── */}
       {flyingCard && (
         <CardFly card={flyingCard} from={flyFrom} to={flyTo} onComplete={onFlyComplete} />
+      )}
+
+      {/* ── Error / info toast ───────────────────────────────────── */}
+      {toastMessage && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-red-800 border border-red-600 text-white text-sm px-5 py-2.5 rounded-full shadow-xl font-semibold whitespace-nowrap pointer-events-none">
+          {toastMessage}
+        </div>
       )}
 
       {/* ── Tactic status toasts ──────────────────────────────────── */}
@@ -239,7 +274,13 @@ export function GameBoard() {
       )}
 
       {/* ── Modals ───────────────────────────────────────────────── */}
-      {showRules && <RulesPopup onClose={closeRules} />}
+      {showRules && (
+        <RulesPopup
+          onClose={closeRules}
+          activeTab={rulesTab}
+          onTabChange={setRulesTab}
+        />
+      )}
       {showGuide && <FormationGuide onClose={closeGuide} />}
       {showStats && (
         <DeckStats
@@ -261,7 +302,8 @@ export function GameBoard() {
         gameState.pendingTactics.flagIndex != null &&
         !gameState.redeployState &&
         !gameState.deserterActive &&
-        !gameState.traitorActive && (
+        !gameState.traitorActive &&
+        !gameState.pendingTraitor && (
         <TacticsConfigModal
           cardName={gameState.pendingTactics.card.name}
           onConfirm={handleTacticsConfigConfirm}
@@ -322,11 +364,64 @@ export function GameBoard() {
           onCancel={handleTacticsCancel}
         />
       )}
-      {gameState.gameStatus !== 'playing' && (
+      {gameState.gameStatus !== 'playing' && !victoryDismissed && (
         <VictoryModal
           result={gameState.gameStatus}
           onPlayAgain={handleNewGame}
+          onDismiss={() => setVictoryDismissed(true)}
         />
+      )}
+
+      {/* ── Post-game locked banner (shown after dismissing victory modal) ── */}
+      {gameState.gameStatus !== 'playing' && victoryDismissed && (
+        <div className={`
+          fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between gap-4 px-6 py-3
+          border-t shadow-lg
+          ${gameState.gameStatus === 'playerWon'
+            ? 'bg-yellow-900/95 border-yellow-600 text-yellow-200'
+            : 'bg-red-950/95 border-red-700 text-red-200'}
+        `}>
+          <span className="font-bold text-sm">
+            {gameState.gameStatus === 'playerWon'
+              ? '🏆 Victory — Your forces claimed the battle line!'
+              : '💀 Defeated — The enemy broke through your defenses.'}
+          </span>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={handleNewGame}
+              className={`
+                text-xs px-4 py-1.5 rounded-lg font-bold transition
+                ${gameState.gameStatus === 'playerWon'
+                  ? 'bg-yellow-400 hover:bg-yellow-300 text-black'
+                  : 'bg-red-600 hover:bg-red-500 text-white'}
+              `}
+            >
+              New Game
+            </button>
+            <button
+              onClick={onExit}
+              className="text-xs px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition"
+            >
+              Main Menu
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Forced draw modal ─────────────────────────────────────── */}
+      {showDrawModal && (
+        <DrawModal
+          troopCount={gameState.deck.length}
+          tacticCount={gameState.tacticsDeck.length}
+          onDraw={handleDeckDraw}
+        />
+      )}
+
+      {/* ── Save confirmation toast ───────────────────────────────── */}
+      {saveToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-green-800 border border-green-600 text-white text-sm px-5 py-2.5 rounded-full shadow-xl font-semibold whitespace-nowrap pointer-events-none">
+          Game saved!
+        </div>
       )}
     </div>
   );
