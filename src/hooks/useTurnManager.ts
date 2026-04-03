@@ -59,7 +59,33 @@ export function useTurnManager({
   const currentTurnRef = useRef<TurnPhase>(currentTurn);
   currentTurnRef.current = currentTurn;
 
+  // Always-fresh ref so closures never capture a stale onAsyncTurnEnd value.
+  const onAsyncTurnEndRef = useRef(onAsyncTurnEnd);
+  onAsyncTurnEndRef.current = onAsyncTurnEnd;
+
   const { getMove } = useOpponentAI();
+
+  // When the game starts on the opponent's turn (CPU goes first in solo mode),
+  // kick off the initial AI move after first render.
+  const didFireInitialAI = useRef(false);
+  useEffect(() => {
+    if (didFireInitialAI.current) return;
+    if ((initialTurnPhase ?? 'player') !== 'opponent') return;
+    if (onAsyncTurnEndRef.current) return; // not solo mode
+    didFireInitialAI.current = true;
+    const gs = gameStateRef.current;
+    const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
+    const t = setTimeout(() => {
+      if (oppMove) {
+        runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+      } else {
+        setCurrentTurn('player');
+      }
+    }, 600);
+    return () => clearTimeout(t);
+  // Intentionally only runs once on mount — initialTurnPhase is stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // --- Animate a draw, then dispatch on completion ---
   // The card is NOT added to the hand until after the animation finishes, so it
@@ -126,8 +152,8 @@ export function useTurnManager({
           // Both decks exhausted — skip draw phase.
           showToast('Both decks are empty — draw phase skipped.');
           setCurrentTurn('opponent');
-          if (onAsyncTurnEnd) {
-            onAsyncTurnEnd();
+          if (onAsyncTurnEndRef.current) {
+            onAsyncTurnEndRef.current();
           } else {
             const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
             if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
@@ -214,9 +240,9 @@ export function useTurnManager({
 
     scheduleDrawAnim('player', deckType, () => {
       setCurrentTurn('opponent');
-      if (onAsyncTurnEnd) {
+      if (onAsyncTurnEndRef.current) {
         // URL-async multiplayer: notify GameManager to show the share modal.
-        onAsyncTurnEnd();
+        onAsyncTurnEndRef.current();
       } else {
         const gs = gameStateRef.current;
         const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
@@ -329,7 +355,7 @@ export function useTurnManager({
   const turnMessage =
     currentTurn === 'player'       ? 'Play a card' :
     currentTurn === 'awaitingDraw' ? 'Draw a card from either the tactics or troop deck' :
-    onAsyncTurnEnd                 ? "Waiting for opponent's move\u2026" :
+    onAsyncTurnEndRef.current      ? "Waiting for opponent's move\u2026" :
                                      "Opponent's turn...";
 
   return {

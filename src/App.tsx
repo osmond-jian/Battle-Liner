@@ -6,8 +6,13 @@ import { hasSave, loadGame, getSaveDate, type LoadedSave } from './utils/saveGam
 import { decodeGameFromUrl, clearGameParam } from './utils/urlGameState';
 import { getOrCreateProfile } from './utils/playerProfile';
 import type { MultiplayerConfig } from './types/multiplayer';
+import type { TurnPhase } from './types/game';
 
 type Screen = 'landing' | 'game' | 'lobby';
+
+function randomFirstTurn(): TurnPhase {
+  return Math.random() < 0.5 ? 'player' : 'opponent';
+}
 
 /**
  * On first render, check if the URL contains a ?game= param (invite link).
@@ -37,11 +42,13 @@ function App() {
   const [screen, setScreen] = useState<Screen>(initial.screen);
   const [loadedSave, setLoadedSave] = useState<LoadedSave | null>(initial.loadedSave);
   const [multiplayerConfig, setMultiplayerConfig] = useState<MultiplayerConfig | undefined>(initial.multiplayerConfig);
+  const [soloFirstTurn, setSoloFirstTurn] = useState<TurnPhase | undefined>(undefined);
   const [saveExists, setSaveExists] = useState(() => hasSave());
 
   const handleStartSolo = () => {
     setLoadedSave(null);
     setMultiplayerConfig(undefined);
+    setSoloFirstTurn(randomFirstTurn());
     setScreen('game');
   };
 
@@ -50,6 +57,7 @@ function App() {
     if (save) {
       setLoadedSave(save);
       setMultiplayerConfig(undefined);
+      setSoloFirstTurn(undefined); // turn phase comes from the save
       setScreen('game');
     }
   };
@@ -62,6 +70,9 @@ function App() {
   const handleStartMultiplayer = (config: MultiplayerConfig) => {
     setMultiplayerConfig(config);
     setLoadedSave(null);
+    // If the local player goes first they are 'player'; otherwise wait as 'opponent'.
+    const localGoesFirst = config.currentTurnName === config.localPlayer.username;
+    setSoloFirstTurn(localGoesFirst ? 'player' : 'opponent');
     setScreen('game');
   };
 
@@ -80,6 +91,7 @@ function App() {
         onExit={handleExit}
         initialState={loadedSave ?? undefined}
         multiplayerConfig={multiplayerConfig}
+        initialTurnPhase={soloFirstTurn}
       />
     );
   }

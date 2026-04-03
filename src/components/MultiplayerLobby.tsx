@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { LocalPlayer, MultiplayerConfig } from '../types/multiplayer';
 import { getOrCreateProfile, saveProfile } from '../utils/playerProfile';
 
-type LobbyView = 'main' | 'create';
+type LobbyView = 'main' | 'create' | 'join';
 
 interface Props {
   onBack: () => void;
@@ -14,8 +14,14 @@ export function MultiplayerLobby({ onBack, onStartGame }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(profile.username);
   const [view, setView] = useState<LobbyView>('main');
+
+  // Create-game state
   const [opponentNameInput, setOpponentNameInput] = useState('');
-  const [nameError, setNameError] = useState('');
+  const [createError, setCreateError] = useState('');
+
+  // Join-game state
+  const [joinNameInput, setJoinNameInput] = useState('');
+  const [joinError, setJoinError] = useState('');
 
   const saveName = () => {
     const trimmed = nameInput.trim();
@@ -28,9 +34,13 @@ export function MultiplayerLobby({ onBack, onStartGame }: Props) {
 
   const handleCreate = () => {
     const opp = opponentNameInput.trim();
-    if (!opp) { setNameError('Enter your opponent\'s name.'); return; }
-    if (opp === profile.username) { setNameError('Opponent name must differ from yours.'); return; }
-    setNameError('');
+    if (!opp) { setCreateError("Enter your opponent's name."); return; }
+    if (opp === profile.username) { setCreateError('Opponent name must differ from yours.'); return; }
+    setCreateError('');
+
+    // Randomly decide who goes first.
+    const firstTurn = Math.random() < 0.5 ? profile.username : opp;
+
     onStartGame({
       localPlayer: profile,
       opponentName: opp,
@@ -38,7 +48,30 @@ export function MultiplayerLobby({ onBack, onStartGame }: Props) {
       transport: 'url-async',
       hostName: profile.username,
       guestName: opp,
-      currentTurnName: profile.username, // host goes first
+      currentTurnName: firstTurn,
+    });
+  };
+
+  const handleJoin = () => {
+    const hostName = joinNameInput.trim();
+    if (!hostName) { setJoinError("Enter the host's name."); return; }
+    if (hostName === profile.username) { setJoinError('Host name must differ from yours.'); return; }
+    setJoinError('');
+
+    // Guest does not know who goes first yet — that was encoded in the invite
+    // link by the host. This config is only used if the guest navigates to the
+    // lobby manually (without a ?game= URL). When they open an invite link,
+    // App.tsx decodes everything from the URL and skips this screen entirely.
+    // We default currentTurnName to the host so the game loads in waiting mode
+    // until the guest receives the first link.
+    onStartGame({
+      localPlayer: profile,
+      opponentName: hostName,
+      isHost: false,
+      transport: 'url-async',
+      hostName,
+      guestName: profile.username,
+      currentTurnName: hostName,
     });
   };
 
@@ -95,10 +128,10 @@ export function MultiplayerLobby({ onBack, onStartGame }: Props) {
           </div>
         </div>
 
+        {/* ── Main view ──────────────────────────────────────────────────── */}
         {view === 'main' && (
           <div className="space-y-3">
 
-            {/* Primary: Invite Link */}
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
               <div className="flex items-start gap-3 mb-4">
                 <span className="text-2xl select-none shrink-0">🔗</span>
@@ -109,15 +142,23 @@ export function MultiplayerLobby({ onBack, onStartGame }: Props) {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => setView('create')}
-                className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-black text-sm uppercase tracking-widest transition"
-              >
-                Create Invite Game
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setView('create')}
+                  className="flex-1 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-black text-sm uppercase tracking-widest transition"
+                >
+                  Host Game
+                </button>
+                <button
+                  onClick={() => setView('join')}
+                  className="flex-1 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-black text-sm uppercase tracking-widest transition"
+                >
+                  Join Game
+                </button>
+              </div>
             </div>
 
-            {/* Secondary: Real-time (coming soon) */}
+            {/* Real-time coming soon */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 opacity-50 cursor-not-allowed select-none">
               <div className="flex items-start gap-3 mb-4">
                 <span className="text-2xl shrink-0">⚡</span>
@@ -145,36 +186,37 @@ export function MultiplayerLobby({ onBack, onStartGame }: Props) {
           </div>
         )}
 
+        {/* ── Host / Create view ─────────────────────────────────────────── */}
         {view === 'create' && (
           <div className="space-y-4">
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
-              <p className="text-xs uppercase tracking-widest text-slate-500 mb-4">New Invite Game</p>
+              <p className="text-xs uppercase tracking-widest text-slate-500 mb-4">Host a Game</p>
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1.5">Your name</label>
+                  <label className="block text-xs text-slate-500 mb-1.5">Your name (host)</label>
                   <div className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-400">
                     {profile.username}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1.5">Opponent's name</label>
+                  <label className="block text-xs text-slate-500 mb-1.5">Opponent's name (guest)</label>
                   <input
                     className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 placeholder:text-slate-600"
                     placeholder="e.g. IronAxe44"
                     value={opponentNameInput}
-                    onChange={e => { setOpponentNameInput(e.target.value); setNameError(''); }}
+                    onChange={e => { setOpponentNameInput(e.target.value); setCreateError(''); }}
                     onKeyDown={e => { if (e.key === 'Enter') handleCreate(); }}
                     maxLength={20}
                     autoFocus
                   />
-                  {nameError && <p className="text-red-400 text-xs mt-1">{nameError}</p>}
+                  {createError && <p className="text-red-400 text-xs mt-1">{createError}</p>}
                 </div>
               </div>
 
               <p className="text-xs text-slate-600 mt-4 leading-relaxed">
-                You go first. After your turn you'll get a link to send to your opponent.
-                They need to set their username to <span className="text-slate-400">"{opponentNameInput || '...'}"</span> in the lobby before opening it.
+                Who goes first is decided randomly at game start. After your turn you will get a link to send to your opponent.
+                Their username must match <span className="text-slate-400">"{opponentNameInput || '...'}"</span>.
               </p>
             </div>
 
@@ -183,6 +225,54 @@ export function MultiplayerLobby({ onBack, onStartGame }: Props) {
               className="w-full py-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-black text-sm uppercase tracking-widest transition"
             >
               Start Game →
+            </button>
+            <button
+              onClick={() => setView('main')}
+              className="w-full py-2 text-slate-500 hover:text-slate-300 text-sm transition"
+            >
+              ← Back
+            </button>
+          </div>
+        )}
+
+        {/* ── Join view ──────────────────────────────────────────────────── */}
+        {view === 'join' && (
+          <div className="space-y-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl p-5">
+              <p className="text-xs uppercase tracking-widest text-slate-500 mb-4">Join a Game</p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5">Your name (guest)</label>
+                  <div className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-400">
+                    {profile.username}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-1.5">Host's name</label>
+                  <input
+                    className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 placeholder:text-slate-600"
+                    placeholder="e.g. SwiftKnight73"
+                    value={joinNameInput}
+                    onChange={e => { setJoinNameInput(e.target.value); setJoinError(''); }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleJoin(); }}
+                    maxLength={20}
+                    autoFocus
+                  />
+                  {joinError && <p className="text-red-400 text-xs mt-1">{joinError}</p>}
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-600 mt-4 leading-relaxed">
+                Once the host starts the game they will send you an invite link. Open that link to load your turn — you do not need to click anything here first.
+              </p>
+            </div>
+
+            <button
+              onClick={handleJoin}
+              className="w-full py-4 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-black text-sm uppercase tracking-widest transition"
+            >
+              Ready to Join →
             </button>
             <button
               onClick={() => setView('main')}
