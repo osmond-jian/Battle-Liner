@@ -33,9 +33,16 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
   // Declared before useTurnManager so they can be passed in without a TDZ error.
   const isAsyncMultiplayer = multiplayerConfig?.transport === 'url-async';
 
-  const [showShareModal, setShowShareModal] = useState(false);
+  // When the host creates a game where the guest goes first, we immediately show
+  // the invite modal so the host can send the initial link before any moves are made.
+  const initialPhase = initialTurnPhase ?? initialState?.turnPhase;
+  const isInitialInvite = isAsyncMultiplayer && initialPhase === 'opponent';
+
+  const [showShareModal, setShowShareModal] = useState(isInitialInvite);
+  const [isInviteModal, setIsInviteModal] = useState(isInitialInvite);
 
   const handleAsyncTurnEnd = useCallback(() => {
+    setIsInviteModal(false);
     setShowShareModal(true);
   }, []);
 
@@ -53,14 +60,17 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
     saveGame(gameState, turn.currentTurn);
   }, [gameState, turn.currentTurn]);
 
-  // Build the share URL: next player's name becomes currentTurnName.
+  // Build the share URL.
+  // For invite modals (guest goes first, host hasn't played yet): the link should
+  // tell the guest it's their turn — currentTurnName stays as-is (already the guest).
+  // For post-turn modals: the link always hands off to the opponent.
   const shareUrl = useMemo(() => {
     if (!multiplayerConfig || !isAsyncMultiplayer) return '';
-    const nextTurnName = multiplayerConfig.currentTurnName === multiplayerConfig.hostName
-      ? multiplayerConfig.guestName
-      : multiplayerConfig.hostName;
+    const nextTurnName = isInviteModal
+      ? multiplayerConfig.currentTurnName   // invite: encode "your turn" for the guest
+      : multiplayerConfig.opponentName;     // post-turn: always the other person next
     return encodeGameToUrl(gameState, { ...multiplayerConfig, currentTurnName: nextTurnName });
-  }, [gameState, multiplayerConfig, isAsyncMultiplayer]);
+  }, [gameState, multiplayerConfig, isAsyncMultiplayer, isInviteModal]);
 
   const handleShareModalDone = useCallback(() => {
     setShowShareModal(false);
@@ -108,6 +118,7 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
       closeStats: modals.closeStats,
       multiplayerConfig,
       showShareModal,
+      isInviteModal,
       shareUrl,
       onShareModalDone: handleShareModalDone,
     }}>

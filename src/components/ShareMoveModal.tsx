@@ -3,14 +3,17 @@ import { useState } from 'react';
 interface ShareMoveModalProps {
   shareUrl: string;
   opponentName: string;
+  /** True when this is the initial invite (no moves made yet). */
+  isInvite?: boolean;
   onDone: () => void;
 }
 
 /**
- * Appears after the local player completes their turn in url-async multiplayer.
- * Shows the shareable URL and instructions to send to the opponent.
+ * Shown after the local player completes their turn (or immediately on game
+ * creation when the guest goes first) in url-async multiplayer. Displays the
+ * shareable URL and instructions to send to the opponent.
  */
-export function ShareMoveModal({ shareUrl, opponentName, onDone }: ShareMoveModalProps) {
+export function ShareMoveModal({ shareUrl, opponentName, isInvite = false, onDone }: ShareMoveModalProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -24,13 +27,15 @@ export function ShareMoveModal({ shareUrl, opponentName, onDone }: ShareMoveModa
       <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-8 max-w-lg w-full mx-4">
 
         <div className="text-center mb-6">
-          <div className="text-3xl select-none mb-3">⚔</div>
+          <div className="text-3xl select-none mb-3">{isInvite ? '🔗' : '⚔'}</div>
           <h2 className="text-xl font-black text-amber-400 uppercase tracking-widest mb-1">
-            Your Turn Is Done
+            {isInvite ? 'Invite Your Opponent' : 'Your Turn Is Done'}
           </h2>
           <p className="text-slate-400 text-sm">
-            Send this link to <span className="text-white font-semibold">{opponentName}</span>.
-            They'll open it to take their turn, then send you a new link.
+            {isInvite
+              ? <>Send this link to <span className="text-white font-semibold">{opponentName}</span> to start the game. They go first.</>
+              : <>Send this link to <span className="text-white font-semibold">{opponentName}</span>. They'll take their turn, then send you a new link.</>
+            }
           </p>
         </div>
 
@@ -55,12 +60,14 @@ export function ShareMoveModal({ shareUrl, opponentName, onDone }: ShareMoveModa
             onClick={onDone}
             className="flex-1 py-3 rounded-xl font-semibold text-sm bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition"
           >
-            Done — Waiting
+            {isInvite ? 'Done — Waiting' : 'Done — Waiting'}
           </button>
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-4">
-          Come back when {opponentName} sends you their reply link.
+          {isInvite
+            ? `Waiting for ${opponentName} to open the link and take their turn.`
+            : `Come back when ${opponentName} sends you their reply link.`}
         </p>
       </div>
     </div>

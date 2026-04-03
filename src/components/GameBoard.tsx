@@ -62,6 +62,7 @@ export function GameBoard() {
     onExit,
     multiplayerConfig,
     showShareModal,
+    isInviteModal,
     shareUrl,
     onShareModalDone,
   } = useGameContext();
@@ -429,6 +430,7 @@ export function GameBoard() {
         <ShareMoveModal
           shareUrl={shareUrl}
           opponentName={opponentName}
+          isInvite={isInviteModal}
           onDone={onShareModalDone}
         />
       )}

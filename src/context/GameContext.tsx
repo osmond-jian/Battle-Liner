@@ -45,6 +45,7 @@ interface GameContextValue {
   // Multiplayer (undefined = singleplayer vs CPU)
   multiplayerConfig?: MultiplayerConfig;
   showShareModal: boolean;
+  isInviteModal: boolean;
   shareUrl: string;
   onShareModalDone: () => void;
 
