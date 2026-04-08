@@ -250,6 +250,69 @@ describe('checkWinner', () => {
     expect(checkWinner(flag)).toBeNull();
   });
 
+  // ── Fog early-claim tests ───────────────────────────────────────────────────
+  //
+  // Regression coverage for: "3 ones vs a 4 on a fog flag" — does early-claim
+  // fire correctly?  The key rule: you must have a COMPLETE formation to claim.
+  // If the incomplete side can still reach a higher total, no early claim.
+
+  it('fog: opponent [1,1,1] cannot claim early when player has [4] and troops available', () => {
+    // Opponent total = 3, complete. Player has [4] (incomplete, 1/3).
+    // Player hand has troops → player can reach at least 4+1+1=6 > 3.
+    const flag = makeFlag(
+      [troop('red', 4)],
+      [troop('red', 1), troop('blue', 1), troop('green', 1)],
+      ['fog'],
+    );
+    const playerHand = [troop('blue', 2), troop('green', 3)];
+    // checkWinner(flag, deck, opponentHand, playerHand)
+    expect(checkWinner(flag, [], [], playerHand)).toBeNull();
+  });
+
+  it('fog: opponent [1,1,1] CAN claim early when player has [4] but zero troops available', () => {
+    // Player has a 4 on flag but no more cards to complete their formation.
+    // Incomplete formation → opponent's complete [1,1,1] (total 3) is awarded.
+    const flag = makeFlag(
+      [troop('red', 4)],
+      [troop('red', 1), troop('blue', 1), troop('green', 1)],
+      ['fog'],
+    );
+    expect(checkWinner(flag, [], [], [])).toBe('opponent');
+  });
+
+  it('fog: player with complete [4,5,6] claims early when opponent [1] cannot reach total 15', () => {
+    // Player total = 15, complete. Opponent has [1] (needs 2 more).
+    // Best opponent can reach: 1 + 10 + 10 = 21 > 15 → cannot claim yet.
+    // But with only low-value cards available (max 3), opponent max = 1+3+2 = 6 < 15 → player claims.
+    const flag = makeFlag(
+      [troop('red', 4), troop('blue', 5), troop('green', 6)],
+      [troop('red', 1)],
+      ['fog'],
+    );
+    const opponentPool = [troop('blue', 2), troop('green', 3)]; // max total from pool: 2+3=5; 1+5=6 < 15
+    expect(checkWinner(flag, [], opponentPool, [])).toBe('player');
+  });
+
+  it('fog: player with complete [4,5,6] cannot claim early when opponent [1] could reach higher total', () => {
+    // Player total = 15. Opponent has [1] and could draw two 8s: 1+8+8 = 17 > 15.
+    const flag = makeFlag(
+      [troop('red', 4), troop('blue', 5), troop('green', 6)],
+      [troop('red', 1)],
+      ['fog'],
+    );
+    const opponentPool = [troop('blue', 8), troop('green', 8)];
+    expect(checkWinner(flag, [], opponentPool, [])).toBeNull();
+  });
+
+  it('fog: neither side can claim while both formations are incomplete', () => {
+    const flag = makeFlag(
+      [troop('red', 9)],
+      [troop('blue', 7)],
+      ['fog'],
+    );
+    expect(checkWinner(flag, [], [], [])).toBeNull();
+  });
+
   // ── Mud modifier tests ──────────────────────────────────────────────────────
 
   it('mud: requires 4 cards per side before winner is declared', () => {

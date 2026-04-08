@@ -168,6 +168,8 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
       showStats:  modals.showStats,
       rulesTab:   modals.rulesTab,
       setRulesTab: modals.setRulesTab,
+      guideTab:   modals.guideTab,
+      setGuideTab: modals.setGuideTab,
       openRules:  modals.openRules,
       openGuide:  modals.openGuide,
       openStats:  modals.openStats,

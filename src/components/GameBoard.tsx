@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getSlotCount } from '../utils/gameLogic';
 import { motion } from 'framer-motion';
 import { useGameContext } from '../context/GameContext';
 import type { Flag as FlagType } from '../types/game';
@@ -57,6 +58,8 @@ export function GameBoard() {
     openStats,
     closeRules,
     closeGuide,
+    guideTab,
+    setGuideTab,
     closeStats,
     onExit,
     multiplayerConfig,
@@ -84,6 +87,10 @@ export function GameBoard() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => setSaveToast(false), 2000);
   };
+
+  // When any flag has mud (4 cards required), all flag columns must be the same
+  // height so the flag poles stay visually aligned.
+  const maxSlots = Math.max(...gameState.flags.map(f => getSlotCount(f)));
 
   // Show the draw modal when the player must draw and no tactic resolution is pending.
   const showDrawModal =
@@ -192,6 +199,7 @@ export function GameBoard() {
                 key={flag.id}
                 flag={flag}
                 flagIndex={i}
+                displaySlots={maxSlots}
                 selected={gameState.selectedFlag === i}
                 onCardPlace={() => handleFlagClick(i)}
                 deserterActive={gameState.deserterActive}
@@ -292,7 +300,13 @@ export function GameBoard() {
           onTabChange={setRulesTab}
         />
       )}
-      {showGuide && <FormationGuide onClose={closeGuide} />}
+      {showGuide && (
+        <FormationGuide
+          onClose={closeGuide}
+          activeTab={guideTab}
+          onTabChange={setGuideTab}
+        />
+      )}
       {showStats && (
         <DeckStats
           onClose={closeStats}
