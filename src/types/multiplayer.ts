@@ -4,8 +4,8 @@ export interface LocalPlayer {
 }
 
 /**
- * 'url-async'  — correspondence style; moves exchanged via shared URLs.
- * 'realtime'   — live play via WebSocket/PeerJS (Phase 3).
+ * 'url-async'  — correspondence style; moves exchanged via shared URLs (legacy).
+ * 'realtime'   — live play via WebRTC DataChannel (PeerJS).
  */
 export type TransportMode = 'url-async' | 'realtime';
 
@@ -14,8 +14,16 @@ export interface MultiplayerConfig {
   opponentName: string;
   isHost: boolean;
   transport: TransportMode;
-  // URL-async fields (also useful for real-time lobby display)
   hostName: string;
   guestName: string;
   currentTurnName: string; // username of whoever plays next
+  roomCode?: string;       // present when transport === 'realtime'
 }
+
+export type PeerStatus =
+  | 'idle'
+  | 'waiting'      // host: peer open, listening for guest
+  | 'connecting'   // guest: attempting to connect to host peer
+  | 'connected'
+  | 'disconnected'
+  | 'error';

@@ -3,8 +3,6 @@ import { GameManager } from './components/GameManager';
 import { LandingPage } from './components/LandingPage';
 import { MultiplayerLobby } from './components/MultiplayerLobby';
 import { hasSave, loadGame, getSaveDate, type LoadedSave } from './utils/saveGame';
-import { decodeGameFromUrl, clearGameParam } from './utils/urlGameState';
-import { getOrCreateProfile } from './utils/playerProfile';
 import type { MultiplayerConfig } from './types/multiplayer';
 import type { TurnPhase } from './types/game';
 
@@ -14,34 +12,10 @@ function randomFirstTurn(): TurnPhase {
   return Math.random() < 0.5 ? 'player' : 'opponent';
 }
 
-/**
- * On first render, check if the URL contains a ?game= param (invite link).
- * If so, decode it immediately and launch straight into the game.
- */
-function resolveInitialScreen(): {
-  screen: Screen;
-  loadedSave: LoadedSave | null;
-  multiplayerConfig: MultiplayerConfig | undefined;
-} {
-  const profile = getOrCreateProfile();
-  const fromUrl = decodeGameFromUrl(profile);
-  if (fromUrl) {
-    clearGameParam();
-    return {
-      screen: 'game',
-      loadedSave: { gameState: fromUrl.gameState, turnPhase: fromUrl.turnPhase, savedAt: new Date() },
-      multiplayerConfig: fromUrl.multiplayerConfig,
-    };
-  }
-  return { screen: 'landing', loadedSave: null, multiplayerConfig: undefined };
-}
-
-const initial = resolveInitialScreen();
-
 function App() {
-  const [screen, setScreen] = useState<Screen>(initial.screen);
-  const [loadedSave, setLoadedSave] = useState<LoadedSave | null>(initial.loadedSave);
-  const [multiplayerConfig, setMultiplayerConfig] = useState<MultiplayerConfig | undefined>(initial.multiplayerConfig);
+  const [screen, setScreen] = useState<Screen>('landing');
+  const [loadedSave, setLoadedSave] = useState<LoadedSave | null>(null);
+  const [multiplayerConfig, setMultiplayerConfig] = useState<MultiplayerConfig | undefined>(undefined);
   const [soloFirstTurn, setSoloFirstTurn] = useState<TurnPhase | undefined>(undefined);
   const [saveExists, setSaveExists] = useState(() => hasSave());
 
@@ -70,7 +44,8 @@ function App() {
   const handleStartMultiplayer = (config: MultiplayerConfig) => {
     setMultiplayerConfig(config);
     setLoadedSave(null);
-    // If the local player goes first they are 'player'; otherwise wait as 'opponent'.
+    // Host starts as 'player' (INIT_STATE will randomise who actually goes first).
+    // Guest starts as 'opponent' (waiting) until INIT_STATE arrives.
     const localGoesFirst = config.currentTurnName === config.localPlayer.username;
     setSoloFirstTurn(localGoesFirst ? 'player' : 'opponent');
     setScreen('game');

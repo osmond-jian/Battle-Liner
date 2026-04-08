@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react';
 import type { Dispatch } from 'react';
 import type { Card as CardType, GameState, TurnPhase } from '../types/game';
 import type { GameAction } from '../engine/gameEngine';
-import type { MultiplayerConfig } from '../types/multiplayer';
+import type { MultiplayerConfig, PeerStatus } from '../types/multiplayer';
 
 interface GameContextValue {
   // Core state & dispatch
@@ -44,10 +44,8 @@ interface GameContextValue {
 
   // Multiplayer (undefined = singleplayer vs CPU)
   multiplayerConfig?: MultiplayerConfig;
-  showShareModal: boolean;
-  isInviteModal: boolean;
-  shareUrl: string;
-  onShareModalDone: () => void;
+  peerStatus: PeerStatus;
+  advanceToPlayerTurn: () => void;
 
   // UI-only modal visibility
   showRules: boolean;

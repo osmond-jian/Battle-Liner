@@ -360,6 +360,8 @@ export function useTurnManager({
 
   return {
     currentTurn,
+    advanceToPlayerTurn:   () => setCurrentTurn('player'),
+    advanceToOpponentTurn: () => setCurrentTurn('opponent'),
     turnMessage,
     toastMessage,
     handleCardClick,

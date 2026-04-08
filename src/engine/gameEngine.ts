@@ -28,7 +28,8 @@ export type GameAction =
   | { type: 'CANCEL_TACTIC_CONFIG' }
   | { type: 'REDEPLOY_DISCARD'; sourceFlagIndex: number; cardIndex: number }
   | { type: 'REORDER_HAND'; fromId: string; toId: string }
-  | { type: 'SORT_HAND'; mode: 'value' | 'color' };
+  | { type: 'SORT_HAND'; mode: 'value' | 'color' }
+  | { type: 'REPLACE_STATE'; state: GameState };
 
 
 export function reducer(state: GameState, action: GameAction): GameState {
@@ -271,6 +272,9 @@ export function reducer(state: GameState, action: GameAction): GameState {
       newState.playerHand = [...troops, ...tactics];
       return newState;
     }
+
+    case 'REPLACE_STATE':
+      return structuredClone(action.state);
 
     default:
       return newState;

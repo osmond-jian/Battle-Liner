@@ -8,7 +8,6 @@ import { CardFly } from './CardFly';
 import { Deck } from './Deck';
 import { DeckStats } from './DeckStats';
 import { DrawModal } from './DrawModal';
-import { ShareMoveModal } from './ShareMoveModal';
 import { Flag } from './Flag';
 import { FormationGuide } from './FormationGuide';
 import { RedeployModal } from './RedeployModal';
@@ -61,18 +60,13 @@ export function GameBoard() {
     closeStats,
     onExit,
     multiplayerConfig,
-    showShareModal,
-    isInviteModal,
-    shareUrl,
-    onShareModalDone,
+    peerStatus,
   } = useGameContext();
 
-  const isMultiplayer   = !!multiplayerConfig;
-  const isAsyncMP       = multiplayerConfig?.transport === 'url-async';
-  const playerName      = multiplayerConfig?.localPlayer.username ?? 'You';
-  const opponentName    = multiplayerConfig?.opponentName ?? 'CPU Bot';
-  // In url-async mode, 'opponent' phase means we're waiting for the other person's link.
-  const isWaitingForOpponent = isAsyncMP && currentTurn === 'opponent' && !showShareModal;
+  const isMultiplayer = !!multiplayerConfig;
+  const isRealtimeMP  = multiplayerConfig?.transport === 'realtime';
+  const playerName    = multiplayerConfig?.localPlayer.username ?? 'You';
+  const opponentName  = multiplayerConfig?.opponentName ?? 'CPU Bot';
 
   // Track whether the victory modal has been dismissed so the board stays visible.
   const [victoryDismissed, setVictoryDismissed] = useState(false);
@@ -425,32 +419,54 @@ export function GameBoard() {
         </div>
       )}
 
-      {/* ── URL-async: share link after your turn ─────────────────── */}
-      {showShareModal && multiplayerConfig && (
-        <ShareMoveModal
-          shareUrl={shareUrl}
-          opponentName={opponentName}
-          isInvite={isInviteModal}
-          onDone={onShareModalDone}
-        />
-      )}
-
-      {/* ── URL-async: waiting for opponent ───────────────────────── */}
-      {isWaitingForOpponent && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center pb-8 pointer-events-none">
-          <div className="bg-slate-800/95 border border-slate-600 rounded-2xl px-8 py-5 shadow-2xl text-center pointer-events-auto max-w-sm mx-4">
-            <p className="text-sm text-slate-300 mb-1">
-              Waiting for <span className="text-amber-400 font-semibold">{opponentName}</span> to play…
-            </p>
-            <p className="text-xs text-slate-500 mb-4">
-              They'll send you a new link when it's your turn.
-            </p>
+      {/* ── P2P: not yet connected (waiting / connecting / error) ── */}
+      {isRealtimeMP && peerStatus !== 'connected' && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl px-8 py-6 shadow-2xl text-center max-w-sm mx-4">
+            {peerStatus === 'waiting' && (
+              <>
+                <p className="text-amber-400 font-bold text-sm mb-2">Waiting for opponent…</p>
+                <p className="text-xs text-slate-400 mb-2">
+                  Share this room code with{' '}
+                  <span className="text-white font-semibold">{opponentName}</span>:
+                </p>
+                <p className="font-mono text-3xl text-amber-400 tracking-[0.3em] font-black mb-5 select-all">
+                  {multiplayerConfig!.roomCode}
+                </p>
+              </>
+            )}
+            {peerStatus === 'connecting' && (
+              <p className="text-slate-300 text-sm mb-5">Connecting to game…</p>
+            )}
+            {peerStatus === 'disconnected' && (
+              <p className="text-red-400 text-sm mb-5">Opponent disconnected.</p>
+            )}
+            {peerStatus === 'error' && (
+              <p className="text-red-400 text-sm mb-5">
+                Connection error — room may be full or unavailable.
+              </p>
+            )}
+            {peerStatus === 'idle' && (
+              <p className="text-slate-400 text-sm mb-5">Initializing…</p>
+            )}
             <button
               onClick={onExit}
               className="text-xs px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition"
             >
               Back to Menu
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── P2P: waiting for opponent's move (game in progress) ───── */}
+      {isRealtimeMP && peerStatus === 'connected' && currentTurn === 'opponent' && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <div className="bg-slate-900/90 border border-slate-700 rounded-xl px-5 py-2.5 text-center">
+            <p className="text-sm text-slate-400">
+              Waiting for{' '}
+              <span className="text-amber-400 font-semibold">{opponentName}</span> to play…
+            </p>
           </div>
         </div>
       )}
