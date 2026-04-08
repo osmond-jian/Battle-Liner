@@ -19,7 +19,7 @@
  *   These are covered by manual integration testing in two browser tabs.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { usePeer, type PeerMessage } from '../hooks/usePeer';
 import { makeState } from './helpers';
@@ -36,6 +36,9 @@ const peerState = vi.hoisted(() => ({
   lastPeer: null as any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   lastConn: null as any,
+  // All connections ever created (useful for reconnect tests).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  allConns: [] as any[],
 }));
 
 // ── Fake PeerJS module ────────────────────────────────────────────────────────
@@ -58,6 +61,7 @@ vi.mock('peerjs', () => {
       },
     };
     peerState.lastConn = conn;
+    peerState.allConns.push(conn);
     return conn;
   }
 
@@ -92,6 +96,7 @@ vi.mock('peerjs', () => {
 beforeEach(() => {
   peerState.lastPeer = null;
   peerState.lastConn = null;
+  peerState.allConns = [];
   vi.clearAllMocks();
 });
 
@@ -327,7 +332,8 @@ describe('usePeer — guest', () => {
     warnSpy.mockRestore();
   });
 
-  it('transitions to disconnected when the connection closes', async () => {
+  it('transitions connected → reconnecting when the connection closes (will retry)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const { result } = renderHook(() =>
       usePeer({ isHost: false, roomCode: 'XYZABC', onMessage: vi.fn() }),
     );
@@ -337,6 +343,175 @@ describe('usePeer — guest', () => {
     expect(result.current.status).toBe('connected');
 
     await act(async () => { peerState.lastConn._emit('close'); });
-    expect(result.current.status).toBe('disconnected');
+    expect(result.current.status).toBe('reconnecting');
+    vi.useRealTimers();
+  });
+
+  it('attempts a new connect() after the 3 s retry delay', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderHook(() =>
+      usePeer({ isHost: false, roomCode: 'XYZABC', onMessage: vi.fn() }),
+    );
+    await waitForPeerInit();
+    await act(async () => { peerState.lastPeer._emit('open'); });
+    // First connect() was issued on 'open' — allConns has 1 entry.
+    expect(peerState.allConns).toHaveLength(1);
+
+    // Simulate the first connection closing.
+    await act(async () => { peerState.allConns[0]._emit('close'); });
+
+    // Advance past the 3 s backoff — a second connect() should fire.
+    await act(async () => { vi.advanceTimersByTime(3100); });
+    expect(peerState.allConns).toHaveLength(2);
+    vi.useRealTimers();
+  });
+});
+
+// ── Host reconnection ─────────────────────────────────────────────────────────
+
+describe('usePeer — host reconnection', () => {
+  /** Helper: open peer and accept one auto-opening connection as host. */
+  async function hostWithConn(onGuestReconnect?: Mock) {
+    const hookResult = renderHook(() =>
+      usePeer({ isHost: true, roomCode: 'ABCDEF', onMessage: vi.fn(), onGuestReconnect }),
+    );
+    await waitForPeerInit();
+    await act(async () => { peerState.lastPeer._emit('open'); });
+
+    const autoConn = {
+      open: true, sent: [] as unknown[],
+      on(event: string, cb: () => void) { if (event === 'open') cb(); },
+      send(msg: unknown) { this.sent.push(msg); },
+      close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', autoConn); });
+    return { ...hookResult, autoConn };
+  }
+
+  it('hadGuest starts false and becomes true after first guest connects', async () => {
+    const { result } = renderHook(() =>
+      usePeer({ isHost: true, roomCode: 'ABCDEF', onMessage: vi.fn() }),
+    );
+    await waitForPeerInit();
+    expect(result.current.hadGuest).toBe(false);
+
+    await act(async () => { peerState.lastPeer._emit('open'); });
+    expect(result.current.hadGuest).toBe(false);
+
+    const autoConn = {
+      open: true, sent: [] as unknown[],
+      on(event: string, cb: () => void) { if (event === 'open') cb(); },
+      send() {}, close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', autoConn); });
+    expect(result.current.hadGuest).toBe(true);
+  });
+
+  it('goes back to waiting (not disconnected) when the guest connection closes', async () => {
+    const { result } = renderHook(() =>
+      usePeer({ isHost: true, roomCode: 'ABCDEF', onMessage: vi.fn() }),
+    );
+    await waitForPeerInit();
+    await act(async () => { peerState.lastPeer._emit('open'); });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let closeConn: any;
+    const closableConn = {
+      open: true, sent: [] as unknown[],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      on(event: string, cb: any) { if (event === 'open') cb(); if (event === 'close') closeConn = cb; },
+      send() {}, close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', closableConn); });
+    expect(result.current.status).toBe('connected');
+
+    await act(async () => { closeConn(); });
+    expect(result.current.status).toBe('waiting');
+  });
+
+  it('accepts a new guest connection after the previous one closed', async () => {
+    const { result } = renderHook(() =>
+      usePeer({ isHost: true, roomCode: 'ABCDEF', onMessage: vi.fn() }),
+    );
+    await waitForPeerInit();
+    await act(async () => { peerState.lastPeer._emit('open'); });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let closeFirst: any;
+    const firstConn = {
+      open: true, sent: [] as unknown[],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      on(event: string, cb: any) { if (event === 'open') cb(); if (event === 'close') closeFirst = cb; },
+      send() {}, close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', firstConn); });
+    await act(async () => { closeFirst(); }); // guest disconnects
+
+    // Now a second connection arrives (guest reconnects).
+    const secondConn = {
+      open: true, sent: [] as unknown[],
+      on(event: string, cb: () => void) { if (event === 'open') cb(); },
+      send() {}, close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', secondConn); });
+    expect(result.current.status).toBe('connected');
+  });
+
+  it('rejects a third-party connection while a guest is already connected', async () => {
+    const { autoConn } = await hostWithConn();
+    expect(peerState.lastPeer /* just to reference autoConn usage */);
+
+    // A second connection attempt arrives while the first is still open.
+    const intruder = { closed: false, on() {}, send() {}, close() { this.closed = true; }, _emit() {} };
+    await act(async () => { peerState.lastPeer._emit('connection', intruder); });
+    expect(intruder.closed).toBe(true);
+    // Original connection is still active.
+    expect(autoConn.sent.length).toBe(0); // nothing disrupted
+  });
+
+  it('does NOT call onGuestReconnect on the initial connection', async () => {
+    const onGuestReconnect = vi.fn();
+    await hostWithConn(onGuestReconnect);
+    expect(onGuestReconnect).not.toHaveBeenCalled();
+  });
+
+  it('calls onGuestReconnect when a guest reconnects after disconnecting', async () => {
+    const onGuestReconnect = vi.fn();
+    renderHook(() =>
+      usePeer({ isHost: true, roomCode: 'ABCDEF', onMessage: vi.fn(), onGuestReconnect }),
+    );
+    await waitForPeerInit();
+    await act(async () => { peerState.lastPeer._emit('open'); });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let closeFirst: any;
+    const firstConn = {
+      open: true, sent: [] as unknown[],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      on(event: string, cb: any) { if (event === 'open') cb(); if (event === 'close') closeFirst = cb; },
+      send() {}, close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', firstConn); });
+    expect(onGuestReconnect).not.toHaveBeenCalled();
+
+    await act(async () => { closeFirst(); });
+
+    const secondConn = {
+      open: true, sent: [] as unknown[],
+      on(event: string, cb: () => void) { if (event === 'open') cb(); },
+      send() {}, close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', secondConn); });
+    expect(onGuestReconnect).toHaveBeenCalledOnce();
+  });
+
+  it('sends a RESYNC_STATE message with the correct shape', async () => {
+    const { result, autoConn } = await hostWithConn();
+    const gs = makeState();
+    act(() => { result.current.sendResync(gs, true); });
+    expect(autoConn.sent).toHaveLength(1);
+    expect((autoConn.sent[0] as PeerMessage).type).toBe('RESYNC_STATE');
+    expect((autoConn.sent[0] as { type: string; isGuestTurn: boolean }).isGuestTurn).toBe(true);
+    expect((autoConn.sent[0] as { type: string; gameState: unknown }).gameState).toBe(gs);
   });
 });

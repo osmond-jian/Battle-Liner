@@ -13,6 +13,9 @@ export function flipGameStatePerspective(state: GameState): GameState {
     opponentHand:          state.playerHand,
     playerTacticsPlayed:   state.opponentTacticsPlayed,
     opponentTacticsPlayed: state.playerTacticsPlayed,
+    gameStatus: state.gameStatus === 'playerWon'   ? 'opponentWon'
+              : state.gameStatus === 'opponentWon' ? 'playerWon'
+              : state.gameStatus,
     flags: state.flags.map(f => ({
       ...f,
       formation: {

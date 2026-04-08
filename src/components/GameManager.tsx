@@ -42,6 +42,12 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
   // These are filled in after useTurnManager runs below.
   const advanceToPlayerTurnRef   = useRef<() => void>(() => {});
   const advanceToOpponentTurnRef = useRef<() => void>(() => {});
+  // currentTurnRef lets the guest-reconnect handler read the live turn without
+  // a stale closure (turn is not available until after useTurnManager runs).
+  const currentTurnRef = useRef<import('../types/game').TurnPhase>('player');
+  // handleGuestReconnectRef breaks the circular dep between usePeer (created
+  // first) and sendResync (returned by usePeer, used in the callback).
+  const handleGuestReconnectRef = useRef<() => void>(() => {});
 
   // The onMessage handler references dispatch and the advance refs, which
   // aren't available until after usePeer and useTurnManager are declared.
@@ -51,10 +57,13 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
   // ── P2P connection ───────────────────────────────────────────────────────
   // usePeer is always called (hooks can't be conditional).
   // When roomCode is '__noop__' the hook exits early and returns idle status.
-  const { status: peerStatus, sendState, sendInitState } = usePeer({
+  const { status: peerStatus, hadGuest, sendState, sendInitState, sendResync } = usePeer({
     isHost,
     roomCode: multiplayerConfig?.roomCode ?? '__noop__',
     onMessage: (msg) => onMessageRef.current(msg),
+    onGuestReconnect: isRealtimeMP && isHost
+      ? () => handleGuestReconnectRef.current()
+      : undefined,
   });
 
   // ── Pending-send pattern ─────────────────────────────────────────────────
@@ -92,9 +101,23 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
   // Wire advance refs now that turn is available.
   advanceToPlayerTurnRef.current   = turn.advanceToPlayerTurn;
   advanceToOpponentTurnRef.current = turn.advanceToOpponentTurn;
+  currentTurnRef.current           = turn.currentTurn;
 
   // Wire the onMessage handler now that both dispatch and advance refs are ready.
   onMessageRef.current = useCallback((msg: PeerMessage) => {
+    if (msg.type === 'RESYNC_STATE') {
+      // Host sent us the current authoritative game state after reconnection.
+      // Flip perspective and restore the correct turn phase.
+      const flipped = flipGameStatePerspective(msg.gameState);
+      dispatch({ type: 'REPLACE_STATE', state: flipped });
+      if (msg.isGuestTurn) {
+        advanceToPlayerTurnRef.current();
+      } else {
+        advanceToOpponentTurnRef.current();
+      }
+      return;
+    }
+
     const flipped = flipGameStatePerspective(msg.gameState);
     dispatch({ type: 'REPLACE_STATE', state: flipped });
     if (msg.type === 'INIT_STATE') {
@@ -111,6 +134,13 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
   // dispatch is stable; isHost is stable for session lifetime.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHost]);
+
+  // Wire the guest-reconnect handler now that sendResync and currentTurnRef are ready.
+  // 'opponent' in host's context = it is the guest's turn.
+  handleGuestReconnectRef.current = () => {
+    const isGuestTurn = currentTurnRef.current === 'opponent';
+    sendResync(gameStateRef.current, isGuestTurn);
+  };
 
   // ── Host sends INIT_STATE once when guest connects ───────────────────────
   const didSendInit = useRef(false);
@@ -178,6 +208,7 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
       closeStats: modals.closeStats,
       multiplayerConfig,
       peerStatus,
+      hadGuest,
       advanceToPlayerTurn: turn.advanceToPlayerTurn,
     }}>
       <GameBoard />

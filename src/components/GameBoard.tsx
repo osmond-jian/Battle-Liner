@@ -64,6 +64,7 @@ export function GameBoard() {
     onExit,
     multiplayerConfig,
     peerStatus,
+    hadGuest,
   } = useGameContext();
 
   const isMultiplayer = !!multiplayerConfig;
@@ -439,10 +440,13 @@ export function GameBoard() {
           <div className="bg-slate-900 border border-slate-700 rounded-2xl px-8 py-6 shadow-2xl text-center max-w-sm mx-4">
             {peerStatus === 'waiting' && (
               <>
-                <p className="text-amber-400 font-bold text-sm mb-2">Waiting for opponent…</p>
+                <p className="text-amber-400 font-bold text-sm mb-2">
+                  {hadGuest ? 'Opponent disconnected — waiting to reconnect…' : 'Waiting for opponent…'}
+                </p>
                 <p className="text-xs text-slate-400 mb-2">
-                  Share this room code with{' '}
-                  <span className="text-white font-semibold">{opponentName}</span>:
+                  {hadGuest
+                    ? 'Ask them to re-enter the room code:'
+                    : <>Share this room code with{' '}<span className="text-white font-semibold">{opponentName}</span>:</>}
                 </p>
                 <p className="font-mono text-3xl text-amber-400 tracking-[0.3em] font-black mb-5 select-all">
                   {multiplayerConfig!.roomCode}
@@ -452,8 +456,13 @@ export function GameBoard() {
             {peerStatus === 'connecting' && (
               <p className="text-slate-300 text-sm mb-5">Connecting to game…</p>
             )}
+            {peerStatus === 'reconnecting' && (
+              <p className="text-amber-400 text-sm mb-5">Connection lost — reconnecting…</p>
+            )}
             {peerStatus === 'disconnected' && (
-              <p className="text-red-400 text-sm mb-5">Opponent disconnected.</p>
+              <p className="text-red-400 text-sm mb-5">
+                {isHost ? 'Connection error.' : 'Disconnected — could not reconnect.'}
+              </p>
             )}
             {peerStatus === 'error' && (
               <p className="text-red-400 text-sm mb-5">
