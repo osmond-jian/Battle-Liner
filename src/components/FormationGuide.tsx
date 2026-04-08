@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Card } from './Card';
 import { Card as CardType, CardColor, CardValue } from '../types/game';
 
@@ -120,14 +119,13 @@ const tactics: TacticEntry[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type Tab = 'formations' | 'tactics';
-
 type Props = {
   onClose: () => void;
+  activeTab: 'formations' | 'tactics';
+  onTabChange: (tab: 'formations' | 'tactics') => void;
 };
 
-export function FormationGuide({ onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>('formations');
+export function FormationGuide({ onClose, activeTab, onTabChange }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -147,7 +145,7 @@ export function FormationGuide({ onClose }: Props) {
         {/* Tabs */}
         <div className="flex gap-2 mb-4 shrink-0">
           <button
-            onClick={() => setActiveTab('formations')}
+            onClick={() => onTabChange('formations')}
             className={`px-4 py-2 rounded font-semibold transition ${
               activeTab === 'formations'
                 ? 'bg-yellow-400 text-black'
@@ -157,7 +155,7 @@ export function FormationGuide({ onClose }: Props) {
             Formations
           </button>
           <button
-            onClick={() => setActiveTab('tactics')}
+            onClick={() => onTabChange('tactics')}
             className={`px-4 py-2 rounded font-semibold transition ${
               activeTab === 'tactics'
                 ? 'bg-yellow-400 text-black'

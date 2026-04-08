@@ -15,6 +15,9 @@ interface FlagProps {
   onTraitorSelect?: (card: CardType, fromFlagIndex: number) => void;
   pendingTraitor?: { card: CardType; fromFlag: number } | null;
   onTraitorDestination?: (toFlagIndex: number) => void;
+  /** Board-wide max slots (4 when any flag has mud). Used to keep all flag
+   *  columns the same height so the flag poles line up vertically. */
+  displaySlots?: number;
 }
 
 export function Flag({
@@ -28,6 +31,7 @@ export function Flag({
   onTraitorSelect,
   pendingTraitor,
   onTraitorDestination,
+  displaySlots,
 }: FlagProps) {
   const isTraitorTarget =
     !!pendingTraitor &&
@@ -46,6 +50,9 @@ export function Flag({
   const wonByPlayer   = flag.winner === 'player';
   const wonByOpponent = flag.winner === 'opponent';
   const slots = getSlotCount(flag);
+  // Total rows to render per side — at least `slots`, but padded to `displaySlots`
+  // so all flag columns have the same height and flag poles stay aligned.
+  const totalRows = Math.max(slots, displaySlots ?? 0);
 
   return (
     <div
@@ -65,7 +72,11 @@ export function Flag({
         id={`flag-${flagIndex}-opponent`}
         className="flex flex-col items-center gap-0.5 w-full"
       >
-        {Array.from({ length: slots }).map((_, i) => {
+        {Array.from({ length: totalRows }).map((_, i) => {
+          // Extra rows beyond this flag's slot count are invisible height-spacers.
+          if (i >= slots) {
+            return <div key={i} className="w-full h-7 invisible" />;
+          }
           const card = flag.formation.opponent.cards[i];
           return card ? (
             <Card
@@ -130,7 +141,11 @@ export function Flag({
         id={`flag-${flagIndex}-player`}
         className="flex flex-col items-center gap-0.5 w-full"
       >
-        {Array.from({ length: slots }).map((_, i) => {
+        {Array.from({ length: totalRows }).map((_, i) => {
+          // Extra rows beyond this flag's slot count are invisible height-spacers.
+          if (i >= slots) {
+            return <div key={i} className="w-full h-7 invisible" />;
+          }
           const card = flag.formation.player.cards[i];
           return card ? (
             <Card key={card.id} card={card} condensed />

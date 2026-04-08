@@ -53,6 +53,8 @@ interface GameContextValue {
   showStats: boolean;
   rulesTab: 'rules' | 'tactics';
   setRulesTab: (tab: 'rules' | 'tactics') => void;
+  guideTab: 'formations' | 'tactics';
+  setGuideTab: (tab: 'formations' | 'tactics') => void;
   openRules: () => void;
   openGuide: () => void;
   openStats: () => void;
