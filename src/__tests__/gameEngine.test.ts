@@ -330,3 +330,31 @@ describe('TRAITOR flow', () => {
     expect(next.pendingTraitor).toBeNull();
   });
 });
+
+// ─── REPLACE_STATE ────────────────────────────────────────────────────────────
+
+describe('REPLACE_STATE', () => {
+  it('replaces the entire state with the given state', () => {
+    const original = createInitialState();
+    const replacement = makeState({ playerHand: [troop('red', 9)], gameStatus: 'playing' });
+    const next = reducer(original, { type: 'REPLACE_STATE', state: replacement });
+    expect(next.playerHand).toHaveLength(1);
+    expect(next.playerHand[0].id).toBe('red-9');
+  });
+
+  it('returns an independent copy (structuredClone) — mutating result does not affect payload', () => {
+    const replacement = makeState({ playerHand: [troop('blue', 4)] });
+    const next = reducer(makeState(), { type: 'REPLACE_STATE', state: replacement });
+    // Mutate the result
+    next.playerHand.push(troop('green', 5));
+    // Original replacement payload is unchanged
+    expect(replacement.playerHand).toHaveLength(1);
+  });
+
+  it('does not mutate the previous state', () => {
+    const original = makeState({ playerHand: [troop('red', 1), troop('red', 2)] });
+    const replacement = makeState({ playerHand: [] });
+    reducer(original, { type: 'REPLACE_STATE', state: replacement });
+    expect(original.playerHand).toHaveLength(2);
+  });
+});
