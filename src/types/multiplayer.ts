@@ -22,8 +22,9 @@ export interface MultiplayerConfig {
 
 export type PeerStatus =
   | 'idle'
-  | 'waiting'      // host: peer open, listening for guest
-  | 'connecting'   // guest: attempting to connect to host peer
+  | 'waiting'       // host: peer open, listening for guest
+  | 'connecting'    // guest: initial connection attempt in progress
+  | 'reconnecting'  // guest: connection lost, retrying
   | 'connected'
   | 'disconnected'
   | 'error';

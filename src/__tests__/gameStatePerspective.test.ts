@@ -148,6 +148,38 @@ describe('flipGameStatePerspective — local state cleared', () => {
   });
 });
 
+// ── Game status inversion ─────────────────────────────────────────────────────
+//
+// Regression: flipGameStatePerspective did not invert gameStatus, causing both
+// players to see "Victory!" when the game ended in multiplayer.
+
+describe('flipGameStatePerspective — gameStatus', () => {
+  it("flips 'playerWon' to 'opponentWon'", () => {
+    const state = makeState({ gameStatus: 'playerWon' });
+    const flipped = flipGameStatePerspective(state);
+    expect(flipped.gameStatus).toBe('opponentWon');
+  });
+
+  it("flips 'opponentWon' to 'playerWon'", () => {
+    const state = makeState({ gameStatus: 'opponentWon' });
+    const flipped = flipGameStatePerspective(state);
+    expect(flipped.gameStatus).toBe('playerWon');
+  });
+
+  it("keeps 'playing' as 'playing'", () => {
+    const state = makeState({ gameStatus: 'playing' });
+    const flipped = flipGameStatePerspective(state);
+    expect(flipped.gameStatus).toBe('playing');
+  });
+
+  it('double flip restores gameStatus', () => {
+    for (const s of ['playing', 'playerWon', 'opponentWon'] as const) {
+      const state = makeState({ gameStatus: s });
+      expect(flipGameStatePerspective(flipGameStatePerspective(state)).gameStatus).toBe(s);
+    }
+  });
+});
+
 // ── Immutability ──────────────────────────────────────────────────────────────
 
 describe('flipGameStatePerspective — immutability', () => {

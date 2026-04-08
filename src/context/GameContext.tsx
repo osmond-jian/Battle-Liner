@@ -45,6 +45,8 @@ interface GameContextValue {
   // Multiplayer (undefined = singleplayer vs CPU)
   multiplayerConfig?: MultiplayerConfig;
   peerStatus: PeerStatus;
+  /** True once the host has received at least one guest connection. */
+  hadGuest: boolean;
   advanceToPlayerTurn: () => void;
 
   // UI-only modal visibility
