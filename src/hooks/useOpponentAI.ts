@@ -1,6 +1,7 @@
 import type { Card, Flag } from '../types/game';
 import type { Move } from '../types/Move';
 import { getSlotCount, calculateFormationStrength } from '../utils/gameLogic';
+import { DEBUG_DISABLE_TACTICS_LIMIT } from '../constants';
 
 // ─── Formation scoring helpers ────────────────────────────────────────────────
 
@@ -54,12 +55,23 @@ export function useOpponentAI() {
    *                     + flag centrality bonus
    *                     + defensive bonus when player is ahead on the flag
    */
-  function getMove(hand: Card[], flags: Flag[], deck: Card[]): Move | null {
+  function getMove(
+    hand: Card[],
+    flags: Flag[],
+    deck: Card[],
+    myTacticsPlayed = 0,
+    theirTacticsPlayed = 0,
+  ): Move | null {
     // Only consider troop cards — tactic cards require interactive flows the AI
     // can't yet drive. If the hand has only tactics, fall back to random below.
     const troopCards = hand.filter(
       c => c.type === 'troop' && c.color !== undefined && c.value !== undefined
     );
+
+    // Respect the tactics-lead rule: AI can't play a tactic if it's already
+    // ahead of the human by 1 or more.
+    const canPlayTactics =
+      DEBUG_DISABLE_TACTICS_LIMIT || myTacticsPlayed <= theirTacticsPlayed;
 
     const playableFlags = flags
       .map((f, i) => ({ flag: f, index: i }))
@@ -73,7 +85,11 @@ export function useOpponentAI() {
 
     // Fall back: if no troop cards, pick a random tactic card on a random flag
     // (we can't fully drive tactic flows, but at least don't deadlock).
-    const cardsToConsider = troopCards.length > 0 ? troopCards : hand;
+    // If tactics are also blocked by the lead rule, cardsToConsider is empty
+    // and we return null (turn skipped gracefully).
+    const cardsToConsider = canPlayTactics
+      ? (troopCards.length > 0 ? troopCards : hand)
+      : troopCards;
     if (cardsToConsider.length === 0) return null;
 
     let bestScore = -Infinity;

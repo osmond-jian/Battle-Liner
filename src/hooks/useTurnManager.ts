@@ -6,6 +6,7 @@ import type { Move } from '../types/Move';
 import { useOpponentAI } from './useOpponentAI';
 import { getSlotCount } from '../utils/gameLogic';
 import type { ActionToAnimate } from './useAnimateAction';
+import { DEBUG_DISABLE_TACTICS_LIMIT } from '../constants';
 
 interface UseTurnManagerParams {
   gameState: GameState;
@@ -74,7 +75,7 @@ export function useTurnManager({
     if (onAsyncTurnEndRef.current) return; // not solo mode
     didFireInitialAI.current = true;
     const gs = gameStateRef.current;
-    const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
+    const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
     const t = setTimeout(() => {
       if (oppMove) {
         runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
@@ -155,7 +156,7 @@ export function useTurnManager({
           if (onAsyncTurnEndRef.current) {
             onAsyncTurnEndRef.current();
           } else {
-            const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
+            const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
             if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
             else setCurrentTurn('player');
           }
@@ -208,6 +209,19 @@ export function useTurnManager({
       }
     }
 
+    // Validate: tactics-lead rule — you can't play more than 1 tactic ahead of
+    // your opponent.  (opponent must play one before you can play another.)
+    if (!DEBUG_DISABLE_TACTICS_LIMIT && card.type === 'tactic') {
+      const { playerTacticsPlayed, opponentTacticsPlayed } = gameStateRef.current;
+      if (playerTacticsPlayed > opponentTacticsPlayed) {
+        showToast("Can't play another tactic until your opponent plays one.");
+        dispatch({ type: 'SELECT_CARD', card: null });
+        dispatch({ type: 'SELECT_FLAG', flagIndex: null });
+        setPlayerMoveDraft({});
+        return;
+      }
+    }
+
     runTurnRef.current({
       player: 'player',
       action: card.type === 'tactic' ? 'useTactic' : 'playCard',
@@ -245,7 +259,7 @@ export function useTurnManager({
         onAsyncTurnEndRef.current();
       } else {
         const gs = gameStateRef.current;
-        const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck);
+        const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
         if (oppMove) {
           runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
         } else {
