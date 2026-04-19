@@ -505,6 +505,49 @@ describe('usePeer — host reconnection', () => {
     expect(onGuestReconnect).toHaveBeenCalledOnce();
   });
 
+  it('does NOT call onGuestReconnect before the reconnected connection opens', async () => {
+    // Regression test for: onGuestReconnect (→ sendResync) was fired immediately
+    // after setupConnection returned, before conn.on('open') fired.
+    // sendResync guards on conn.open === false, so the send was silently dropped
+    // and the reconnecting guest saw a fresh board instead of the live game state.
+    const onGuestReconnect = vi.fn();
+    renderHook(() =>
+      usePeer({ isHost: true, roomCode: 'ABCDEF', onMessage: vi.fn(), onGuestReconnect }),
+    );
+    await waitForPeerInit();
+    await act(async () => { peerState.lastPeer._emit('open'); });
+
+    // First connection (open fires immediately, simulating normal PeerJS behaviour).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let closeFirst: any;
+    const firstConn = {
+      open: true, sent: [] as unknown[],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      on(event: string, cb: any) { if (event === 'open') cb(); if (event === 'close') closeFirst = cb; },
+      send() {}, close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', firstConn); });
+    await act(async () => { closeFirst(); }); // guest disconnects
+
+    // Second connection arrives but 'open' has NOT fired yet.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let openSecond: (() => void) | undefined;
+    const secondConn = {
+      open: false, sent: [] as unknown[],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      on(event: string, cb: any) { if (event === 'open') openSecond = cb; },
+      send() {}, close() {}, _emit() {},
+    };
+    await act(async () => { peerState.lastPeer._emit('connection', secondConn); });
+
+    // onGuestReconnect must NOT have been called yet — the channel isn't open.
+    expect(onGuestReconnect).not.toHaveBeenCalled();
+
+    // Once the channel opens, onGuestReconnect fires.
+    await act(async () => { openSecond!(); });
+    expect(onGuestReconnect).toHaveBeenCalledOnce();
+  });
+
   it('sends a RESYNC_STATE message with the correct shape', async () => {
     const { result, autoConn } = await hostWithConn();
     const gs = makeState();

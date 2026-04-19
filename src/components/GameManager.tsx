@@ -159,6 +159,19 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
     // else: host is already on 'player' turn (default initialTurnPhase).
   }, [peerStatus, isRealtimeMP, isHost, sendInitState]);
 
+  // ── Game-over broadcast ──────────────────────────────────────────────────
+  // The normal pendingSend path (triggered by handleDeckDraw) is skipped when
+  // the game ends because showDrawModal is gated on gameStatus === 'playing'.
+  // This effect closes that gap: whenever THIS player wins, schedule a send so
+  // the opponent receives the final state and sees the defeat screen.
+  useEffect(() => {
+    if (!isRealtimeMP) return;
+    if (gameState.gameStatus !== 'playerWon') return;
+    setPendingSend(true);
+  // gameState.gameStatus changing is the only trigger we need here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.gameStatus, isRealtimeMP]);
+
   // ── Save ─────────────────────────────────────────────────────────────────
   const handleSave = useCallback(() => {
     saveGame(gameState, turn.currentTurn);

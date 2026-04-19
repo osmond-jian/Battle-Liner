@@ -78,7 +78,7 @@ export function useTurnManager({
     const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
     const t = setTimeout(() => {
       if (oppMove) {
-        runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+        runTurnRef.current({ ...oppMove, player: 'opponent' });
       } else {
         setCurrentTurn('player');
       }
@@ -123,7 +123,7 @@ export function useTurnManager({
     setAnimatingAction('PLAY_CARD');
     animate(animAction, () => {
       if (move.action === 'useTactic') {
-        dispatch({ type: 'APPLY_TACTIC', card: move.card, flagIndex: move.flagIndex });
+        dispatch({ type: 'APPLY_TACTIC', card: move.card, flagIndex: move.flagIndex, player: move.player });
       } else {
         dispatch({ type: 'PLAY_CARD', card: move.card, flagIndex: move.flagIndex, player: move.player });
       }
@@ -157,7 +157,7 @@ export function useTurnManager({
             onAsyncTurnEndRef.current();
           } else {
             const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
-            if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+            if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent' });
             else setCurrentTurn('player');
           }
         } else {
@@ -261,7 +261,7 @@ export function useTurnManager({
         const gs = gameStateRef.current;
         const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
         if (oppMove) {
-          runTurnRef.current({ ...oppMove, player: 'opponent', action: 'playCard' });
+          runTurnRef.current({ ...oppMove, player: 'opponent' });
         } else {
           setCurrentTurn('player');
         }
@@ -339,6 +339,7 @@ export function useTurnManager({
       type: 'APPLY_TACTIC',
       card: { ...pending.card, color: c, value: v },
       flagIndex: pending.flagIndex,
+      player: 'player',
     });
     dispatch({ type: 'CLEAR_PENDING_TACTIC' });
   }, [dispatch]);

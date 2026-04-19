@@ -132,11 +132,11 @@ describe('DRAW_CARD', () => {
     expect(next.playerHand).toHaveLength(1);
   });
 
-  it('increments playerTacticsPlayed when drawing from tactic deck', () => {
+  it('does NOT increment playerTacticsPlayed when drawing from tactic deck (drawing ≠ playing)', () => {
     const state = createInitialState();
     const before = state.playerTacticsPlayed;
     const next = reducer(state, { type: 'DRAW_CARD', deckType: 'tactic', player: 'player' });
-    expect(next.playerTacticsPlayed).toBe(before + 1);
+    expect(next.playerTacticsPlayed).toBe(before);
   });
 
   it('does NOT increment playerTacticsPlayed when drawing a troop card', () => {
@@ -199,6 +199,28 @@ describe('APPLY_TACTIC', () => {
     const state = makeState({ playerHand: [fogCard] });
     const next = reducer(state, { type: 'APPLY_TACTIC', card: fogCard, flagIndex: 0 });
     expect(next.playerTacticsPlayed).toBe(1);
+  });
+
+  it('increments opponentTacticsPlayed (not playerTacticsPlayed) when player is "opponent"', () => {
+    // Bug regression: opponent tactic plays were dispatched as PLAY_CARD instead of
+    // APPLY_TACTIC, so opponentTacticsPlayed was never incremented.  The tactics-lead
+    // rule then incorrectly blocked the human player even though the opponent had
+    // visually played a tactic on the board.
+    const mudCard = tactic('t6', 'Mud', 'mud');
+    const state = makeState({ opponentHand: [mudCard] });
+    const next = reducer(state, { type: 'APPLY_TACTIC', card: mudCard, flagIndex: 0, player: 'opponent' });
+    expect(next.opponentTacticsPlayed).toBe(1);
+    expect(next.playerTacticsPlayed).toBe(0);
+  });
+
+  it('PLAY_CARD does NOT increment playerTacticsPlayed even for a tactic card', () => {
+    // PLAY_CARD is the wrong dispatch for tactic cards — it bypasses the counter.
+    // This test ensures that if a tactic card is accidentally dispatched via PLAY_CARD
+    // (the original bug), the counter is not affected.
+    const fogCard = tactic('t5', 'Fog', 'fog');
+    const state = makeState({ playerHand: [fogCard] });
+    const next = reducer(state, { type: 'PLAY_CARD', card: fogCard, flagIndex: 0, player: 'player' });
+    expect(next.playerTacticsPlayed).toBe(0);
   });
 });
 
