@@ -192,7 +192,7 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
       handleOpponentCardClick:   turn.handleOpponentCardClick,
       handleRedeployConfirm:     turn.handleRedeployConfirm,
       handleScoutDraw:           turn.handleScoutDraw,
-      handleScoutChoose:         turn.handleScoutChoose,
+      handleScoutSkipDraws:      turn.handleScoutSkipDraws,
       handleScoutDiscard:        turn.handleScoutDiscard,
       handleTacticsConfigConfirm: turn.handleTacticsConfigConfirm,
       handleTacticsCancel:       turn.handleTacticsCancel,

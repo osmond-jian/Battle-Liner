@@ -41,9 +41,24 @@ export function handleApplyTactic(
   if (player === 'player') {
     newState.playerHand = newState.playerHand.filter(c => c.id !== card.id);
     newState.playerTacticsPlayed += 1;
+    newState.playerPlayedTactics.push(card);
   } else {
     newState.opponentHand = newState.opponentHand.filter(c => c.id !== card.id);
     newState.opponentTacticsPlayed += 1;
+    newState.opponentPlayedTactics.push(card);
+  }
+  {
+    const onFlag = ['Fog', 'Mud', 'Leader', 'Companion Cavalry', 'Shield Bearers'].includes(card.name ?? '');
+    const extra =
+      card.name === 'Scout'    ? ' — drew 3 extra cards' :
+      card.name === 'Deserter' ? ' — removed a played card' :
+      card.name === 'Traitor'  ? ' — stole a troop card' :
+      card.name === 'Redeploy' ? ' — repositioned a troop' : '';
+    const moveRecord = {
+      summary: `Played ${card.name ?? 'tactic'}${onFlag ? ` on Flag ${flagIndex + 1}` : ''}${extra}`,
+    };
+    if (player === 'opponent') newState.lastOpponentMove = moveRecord;
+    else newState.lastPlayerMove = moveRecord;
   }
 
   switch (card.name) {

@@ -34,5 +34,9 @@ export function createInitialState(): GameState {
     traitorActive: false,
     redeployState: false,
     leaderPending: undefined,
+    lastOpponentMove: null,
+    lastPlayerMove: null,
+    playerPlayedTactics: [],
+    opponentPlayedTactics: [],
   };
 }

@@ -18,6 +18,10 @@ interface FlagProps {
   /** Board-wide max slots (4 when any flag has mud). Used to keep all flag
    *  columns the same height so the flag poles line up vertically. */
   displaySlots?: number;
+  /** Card ID of the opponent's last-placed card — rendered with a red highlight ring. */
+  lastOpponentHighlightCardId?: string;
+  /** Card ID of the player's last-placed card — rendered with a green highlight ring. */
+  lastPlayerHighlightCardId?: string;
 }
 
 export function Flag({
@@ -32,6 +36,8 @@ export function Flag({
   pendingTraitor,
   onTraitorDestination,
   displaySlots,
+  lastOpponentHighlightCardId,
+  lastPlayerHighlightCardId,
 }: FlagProps) {
   const isTraitorTarget =
     !!pendingTraitor &&
@@ -88,7 +94,9 @@ export function Flag({
                 else if (traitorActive && onTraitorSelect && card.type === 'troop') onTraitorSelect(card, flagIndex);
               }}
               className={
-                (deserterActive || traitorActive) && card.type === 'troop'
+                card.id === lastOpponentHighlightCardId
+                  ? 'ring-2 ring-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
+                  : (deserterActive || traitorActive) && card.type === 'troop'
                   ? 'cursor-pointer ring-1 ring-red-400 brightness-110'
                   : ''
               }
@@ -148,7 +156,16 @@ export function Flag({
           }
           const card = flag.formation.player.cards[i];
           return card ? (
-            <Card key={card.id} card={card} condensed />
+            <Card
+              key={card.id}
+              card={card}
+              condensed
+              className={
+                card.id === lastPlayerHighlightCardId
+                  ? 'ring-2 ring-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]'
+                  : ''
+              }
+            />
           ) : (
             <div key={i} className="w-full h-7 rounded border border-dashed border-white/10" />
           );

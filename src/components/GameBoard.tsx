@@ -3,6 +3,7 @@ import { getSlotCount } from '../utils/gameLogic';
 import { motion } from 'framer-motion';
 import { useGameContext } from '../context/GameContext';
 import type { Flag as FlagType } from '../types/game';
+import { Card } from './Card';
 import { DraggableCard } from './DraggableCard';
 import { CardBack } from './CardBack';
 import { CardFly } from './CardFly';
@@ -33,7 +34,7 @@ export function GameBoard() {
     handleOpponentCardClick,
     handleRedeployConfirm,
     handleScoutDraw,
-    handleScoutChoose,
+    handleScoutSkipDraws,
     handleScoutDiscard,
     handleTacticsConfigConfirm,
     handleTacticsCancel,
@@ -163,7 +164,7 @@ export function GameBoard() {
       </div>
 
       {/* ── Main play area ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-0 px-4 py-2 gap-2">
+      <div className="flex-1 flex flex-col min-h-0 px-2 sm:px-4 py-2 gap-2">
 
         {/* Opponent row */}
         <div className="shrink-0 flex items-center gap-2 sm:gap-3">
@@ -186,66 +187,115 @@ export function GameBoard() {
               </motion.div>
             ))}
           </div>
-          <button
-            onClick={openStats}
-            className="hidden sm:inline-flex text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition shrink-0"
-          >
-            Deck Stats
-          </button>
         </div>
 
-        {/* Flags — scrollable in both directions; centered when space allows */}
-        <div className="flex-1 overflow-auto flags-scroll min-h-0">
-          <div className="flex min-h-full items-center justify-center">
-            <div className="flex gap-0.5 px-2 py-1">
-              {gameState.flags.map((flag: FlagType, i: number) => (
-                <Flag
-                  key={flag.id}
-                  flag={flag}
-                  flagIndex={i}
-                  displaySlots={maxSlots}
-                  selected={gameState.selectedFlag === i}
-                  onCardPlace={() => handleFlagClick(i)}
-                  deserterActive={gameState.deserterActive}
-                  traitorActive={gameState.traitorActive}
-                  onDeserterSelect={handleOpponentCardClick}
-                  onTraitorSelect={handleOpponentCardClick}
-                  pendingTraitor={gameState.pendingTraitor}
-                  onTraitorDestination={handleTraitorPlace}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* Flags + Deck side panel — deck is always visible on the right edge */}
+        <div className="flex-1 flex min-h-0 gap-1 sm:gap-2">
 
-        {/* Deck strip — draw handled by DrawModal; display is purely informational */}
-        {/* Mobile: compact count pills */}
-        <div className="sm:hidden shrink-0 flex justify-center items-center gap-5 py-0.5">
-          <div id="deck-troop" className="flex items-center gap-1.5">
-            <div className="w-6 h-8 rounded bg-blue-950 border border-blue-800 flex items-center justify-center text-[11px] font-bold text-white leading-none">
-              {gameState.deck.length}
+          {/* Flags — scrollable in both directions; centered when space allows */}
+          <div className="flex-1 overflow-auto flags-scroll min-h-0">
+            <div className="flex min-h-full items-center justify-center">
+              <div className="flex gap-0.5 px-2 py-1">
+                {/* ── Tactics graveyard column ── */}
+                <div className="flex flex-col items-center gap-1 px-1 py-2 w-[88px] shrink-0">
+                  {/* Opponent played tactics */}
+                  <div className="flex flex-col items-center gap-0.5 w-full">
+                    {gameState.opponentPlayedTactics.length === 0 ? (
+                      <div className="w-full h-7 rounded border border-dashed border-white/10" />
+                    ) : (
+                      gameState.opponentPlayedTactics.map(c => (
+                        <Card key={c.id} card={c} condensed className="opacity-70" />
+                      ))
+                    )}
+                  </div>
+                  {/* Label */}
+                  <div className="flex flex-col items-center my-0.5">
+                    <div className="w-10 rounded-t-sm py-0.5 flex items-center justify-center text-[9px] font-bold shadow-sm bg-slate-700 text-slate-400">
+                      Played
+                    </div>
+                    <div className="w-1.5 rounded-full bg-slate-600" style={{ height: '32px' }} />
+                    <div className="w-6 h-1.5 rounded-full bg-slate-700" />
+                  </div>
+                  {/* Player played tactics */}
+                  <div className="flex flex-col items-center gap-0.5 w-full">
+                    {gameState.playerPlayedTactics.length === 0 ? (
+                      <div className="w-full h-7 rounded border border-dashed border-white/10" />
+                    ) : (
+                      gameState.playerPlayedTactics.map(c => (
+                        <Card key={c.id} card={c} condensed className="opacity-70" />
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {gameState.flags.map((flag: FlagType, i: number) => (
+                  <Flag
+                    key={flag.id}
+                    flag={flag}
+                    flagIndex={i}
+                    displaySlots={maxSlots}
+                    selected={gameState.selectedFlag === i}
+                    onCardPlace={() => handleFlagClick(i)}
+                    deserterActive={gameState.deserterActive}
+                    traitorActive={gameState.traitorActive}
+                    onDeserterSelect={handleOpponentCardClick}
+                    onTraitorSelect={handleOpponentCardClick}
+                    pendingTraitor={gameState.pendingTraitor}
+                    onTraitorDestination={handleTraitorPlace}
+                    lastOpponentHighlightCardId={
+                      currentTurn !== 'opponent'
+                        ? gameState.lastOpponentMove?.highlightCardId
+                        : undefined
+                    }
+                    lastPlayerHighlightCardId={
+                      currentTurn === 'opponent'
+                        ? gameState.lastPlayerMove?.highlightCardId
+                        : undefined
+                    }
+                  />
+                ))}
+              </div>
             </div>
-            <span className="text-[11px] text-slate-500 uppercase tracking-wider">Troops</span>
           </div>
-          <div className="w-px h-4 bg-slate-800" />
-          <div id="deck-tactic" className="flex items-center gap-1.5">
-            <div className="w-6 h-8 rounded bg-amber-950 border border-amber-800 flex items-center justify-center text-[11px] font-bold text-white leading-none">
-              {gameState.tacticsDeck.length}
+
+          {/* Deck side panel — fixed right edge, not part of flag scroll */}
+          <div className="shrink-0 flex flex-col justify-center items-center gap-2 px-1 sm:px-2 border-l border-slate-800/60">
+            {/* Mobile: compact mini-card representations */}
+            <div className="sm:hidden flex flex-col items-center gap-3">
+              <div id="deck-troop" className="flex flex-col items-center gap-0.5">
+                <div className={`w-7 h-10 rounded border ${gameState.deck.length === 0 ? 'bg-slate-900 border-slate-800 opacity-40' : 'bg-blue-950 border-blue-800'}`} />
+                <span className={`text-[11px] font-bold leading-none ${gameState.deck.length === 0 ? 'text-slate-600' : 'text-blue-300'}`}>
+                  {gameState.deck.length}
+                </span>
+                <span className="text-[9px] text-slate-600 uppercase tracking-wider leading-none">Trp</span>
+              </div>
+              <div className="w-4 h-px bg-slate-800" />
+              <div id="deck-tactic" className="flex flex-col items-center gap-0.5">
+                <div className={`w-7 h-10 rounded border ${gameState.tacticsDeck.length === 0 ? 'bg-slate-900 border-slate-800 opacity-40' : 'bg-amber-950 border-amber-800'}`} />
+                <span className={`text-[11px] font-bold leading-none ${gameState.tacticsDeck.length === 0 ? 'text-slate-600' : 'text-amber-300'}`}>
+                  {gameState.tacticsDeck.length}
+                </span>
+                <span className="text-[9px] text-slate-600 uppercase tracking-wider leading-none">Tac</span>
+              </div>
             </div>
-            <span className="text-[11px] text-slate-500 uppercase tracking-wider">Tactics</span>
+            {/* Desktop: full Deck card visuals */}
+            <div className="hidden sm:flex flex-col items-center gap-3">
+              <div id="deck-troop">
+                <Deck cardsRemaining={gameState.deck.length} variant="troop" />
+              </div>
+              <div className="w-8 h-px bg-slate-800" />
+              <div id="deck-tactic">
+                <Deck cardsRemaining={gameState.tacticsDeck.length} variant="tactic" />
+              </div>
+              <button
+                onClick={openStats}
+                className="text-[10px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-500 border border-slate-700 transition"
+              >
+                Stats
+              </button>
+            </div>
           </div>
-        </div>
-        {/* Desktop: full deck card visuals */}
-        <div className="hidden sm:flex shrink-0 justify-center items-center gap-10">
-          <div id="deck-troop" className="flex flex-col items-center gap-1">
-            <Deck cardsRemaining={gameState.deck.length} variant="troop" />
-            <span className="text-[10px] text-slate-600 uppercase tracking-widest">Troops</span>
-          </div>
-          <div className="w-px h-10 bg-slate-800" />
-          <div id="deck-tactic" className="flex flex-col items-center gap-1">
-            <Deck cardsRemaining={gameState.tacticsDeck.length} variant="tactic" />
-            <span className="text-[10px] text-slate-600 uppercase tracking-widest">Tactics</span>
-          </div>
+
         </div>
 
         {/* Player hand */}
@@ -288,6 +338,24 @@ export function GameBoard() {
             </button>
           </div>
         </div>
+
+        {/* Last move info — shown below the player hand */}
+        {(gameState.lastOpponentMove || gameState.lastPlayerMove) && (
+          <div className="shrink-0 flex flex-wrap gap-x-4 gap-y-0.5 px-1 text-[11px] leading-tight">
+            {gameState.lastOpponentMove && currentTurn !== 'opponent' && (
+              <span className="min-w-0 truncate text-red-400/80">
+                <span className="font-semibold text-red-500">{opponentName}: </span>
+                {gameState.lastOpponentMove.summary}
+              </span>
+            )}
+            {gameState.lastPlayerMove && (
+              <span className="min-w-0 truncate text-emerald-400/80 ml-auto">
+                <span className="font-semibold text-emerald-500">You: </span>
+                {gameState.lastPlayerMove.summary}
+              </span>
+            )}
+          </div>
+        )}
 
       </div>
 
@@ -367,12 +435,13 @@ export function GameBoard() {
         <ScoutDrawModal
           drawn={gameState.scoutDrawStep.drawn}
           remaining={gameState.scoutDrawStep.remaining}
-          keep={gameState.scoutDrawStep.keep}
-          discards={gameState.scoutDrawStep.discards}
+          playerHand={gameState.playerHand}
+          troopDeckEmpty={gameState.deck.length === 0}
+          tacticDeckEmpty={gameState.tacticsDeck.length === 0}
           onDrawFromTroop={() => handleScoutDraw('troop')}
           onDrawFromTactic={() => handleScoutDraw('tactic')}
-          onPickFinal={handleScoutChoose}
-          onDiscardSelect={handleScoutDiscard}
+          onSkipDraws={handleScoutSkipDraws}
+          onDiscardConfirm={handleScoutDiscard}
           onCancel={handleTacticsCancel}
         />
       )}

@@ -49,6 +49,10 @@ export function makeState(overrides: Partial<GameState> = {}): GameState {
     pendingTactics: null,
     pendingTraitor: null,
     scoutDrawStep: null,
+    lastOpponentMove: null,
+    lastPlayerMove: null,
+    playerPlayedTactics: [],
+    opponentPlayedTactics: [],
     ...overrides,
   };
 }

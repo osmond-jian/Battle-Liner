@@ -22,8 +22,8 @@ interface GameContextValue {
   handleOpponentCardClick: (card: CardType, flagIndex: number) => void;
   handleRedeployConfirm: (sourceFlagIndex: number, cardIndex: number, destinationFlagIndex: number | null) => void;
   handleScoutDraw: (deckType: 'troop' | 'tactic') => void;
-  handleScoutChoose: (card: CardType) => void;
-  handleScoutDiscard: (card: CardType) => void;
+  handleScoutSkipDraws: () => void;
+  handleScoutDiscard: (cards: [CardType, CardType]) => void;
   handleTacticsConfigConfirm: (color: string, value: number) => void;
   handleTacticsCancel: () => void;
   handleTraitorPlace: (toFlagIndex: number) => void;

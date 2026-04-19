@@ -302,18 +302,26 @@ export function useTurnManager({
     dispatch({ type: 'SCOUT_DRAW', from: deckType });
   }, [dispatch]);
 
-  const handleScoutChoose = useCallback((card: CardType) => {
-    dispatch({ type: 'SCOUT_PICK', chosen: card });
+  const handleScoutSkipDraws = useCallback(() => {
+    dispatch({ type: 'SCOUT_SKIP_DRAWS' });
   }, [dispatch]);
 
-  const handleScoutDiscard = useCallback((card: CardType) => {
-    const { discards } = gameStateRef.current.scoutDrawStep || {};
-    if (!discards) return;
-    const newOrder = [card, ...discards.filter(c => c.id !== card.id)];
-    if (newOrder.length === 2) {
-      dispatch({ type: 'SCOUT_DISCARD_ORDER', discards: [newOrder[0], newOrder[1]] });
+  const handleScoutDiscard = useCallback((cards: [CardType, CardType]) => {
+    dispatch({ type: 'SCOUT_DISCARD_ORDER', discards: cards });
+    // Scout replaces the draw phase — advance directly to the opponent's turn.
+    setCurrentTurn('opponent');
+    if (onAsyncTurnEndRef.current) {
+      onAsyncTurnEndRef.current();
+    } else {
+      // Use a tiny delay so the dispatch above has settled before we read state.
+      setTimeout(() => {
+        const gs = gameStateRef.current;
+        const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
+        if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent' });
+        else setCurrentTurn('player');
+      }, 0);
     }
-  }, [dispatch]);
+  }, [dispatch, getMove]);
 
   const handleTacticsConfigConfirm = useCallback((color: string, value: number) => {
     const gs = gameStateRef.current;
@@ -386,7 +394,7 @@ export function useTurnManager({
     handleOpponentCardClick,
     handleRedeployConfirm,
     handleScoutDraw,
-    handleScoutChoose,
+    handleScoutSkipDraws,
     handleScoutDiscard,
     handleTacticsConfigConfirm,
     handleTacticsCancel,

@@ -149,38 +149,60 @@ describe('DRAW_CARD', () => {
 
 // ─── SCOUT actions ────────────────────────────────────────────────────────────
 
-describe('SCOUT_PICK', () => {
-  it('adds chosen card to player hand', () => {
-    const card = troop('red', 5);
+describe('SCOUT_DRAW', () => {
+  it('adds drawn card to hand immediately and to drawn list', () => {
+    const topCard = troop('red', 5);
     const state = makeState({
-      scoutDrawStep: { drawn: [card, troop('blue', 3)], remaining: 0 },
+      deck: [topCard, troop('blue', 3)],
       playerHand: [],
+      scoutDrawStep: { drawn: [], remaining: 3 },
     });
-    const next = reducer(state, { type: 'SCOUT_PICK', chosen: card });
-    expect(next.playerHand.map(c => c.id)).toContain(card.id);
+    const next = reducer(state, { type: 'SCOUT_DRAW', from: 'troop' });
+    expect(next.playerHand.map(c => c.id)).toContain(topCard.id);
+    expect(next.scoutDrawStep?.drawn.map(c => c.id)).toContain(topCard.id);
+    expect(next.scoutDrawStep?.remaining).toBe(2);
+    expect(next.deck).toHaveLength(1);
   });
 
-  it('does NOT increment playerTacticsPlayed (counter was bumped when Scout was played)', () => {
-    const card = troop('red', 5);
+  it('does nothing when deck is empty', () => {
     const state = makeState({
-      playerTacticsPlayed: 1, // already incremented by APPLY_TACTIC for Scout
-      scoutDrawStep: { drawn: [card, troop('blue', 3)], remaining: 0 },
+      deck: [],
+      scoutDrawStep: { drawn: [], remaining: 2 },
     });
-    const next = reducer(state, { type: 'SCOUT_PICK', chosen: card });
-    expect(next.playerTacticsPlayed).toBe(1);
+    const next = reducer(state, { type: 'SCOUT_DRAW', from: 'troop' });
+    expect(next.scoutDrawStep?.remaining).toBe(2); // unchanged
+  });
+});
+
+describe('SCOUT_DISCARD_ORDER', () => {
+  it('removes discarded cards from player hand and returns each to its own deck', () => {
+    const troop1 = troop('red', 5);
+    const tac1 = tactic('t1', 'Scout', 'scout');
+    const keeper = troop('blue', 3);
+    const state = makeState({
+      deck: [],
+      tacticsDeck: [],
+      playerHand: [troop1, tac1, keeper],
+      scoutDrawStep: { drawn: [troop1, tac1], remaining: 0 },
+    });
+    const next = reducer(state, { type: 'SCOUT_DISCARD_ORDER', discards: [troop1, tac1] });
+    expect(next.playerHand.map(c => c.id)).toEqual([keeper.id]);
+    expect(next.deck.map(c => c.id)).toContain(troop1.id);
+    expect(next.tacticsDeck.map(c => c.id)).toContain(tac1.id);
+    expect(next.scoutDrawStep).toBeNull();
   });
 
-  it('sets discards to the unchosen cards', () => {
-    const keep = troop('red', 5);
-    const discard1 = troop('blue', 3);
-    const discard2 = troop('green', 7);
+  it('puts both troops on the troop deck', () => {
+    const t1 = troop('red', 5);
+    const t2 = troop('blue', 3);
     const state = makeState({
-      scoutDrawStep: { drawn: [keep, discard1, discard2], remaining: 0 },
+      deck: [],
+      playerHand: [t1, t2],
+      scoutDrawStep: { drawn: [t1, t2], remaining: 0 },
     });
-    const next = reducer(state, { type: 'SCOUT_PICK', chosen: keep });
-    expect(next.scoutDrawStep?.discards?.map(c => c.id)).toEqual(
-      expect.arrayContaining([discard1.id, discard2.id]),
-    );
+    const next = reducer(state, { type: 'SCOUT_DISCARD_ORDER', discards: [t1, t2] });
+    expect(next.deck).toHaveLength(2);
+    expect(next.tacticsDeck).toHaveLength(0);
   });
 });
 

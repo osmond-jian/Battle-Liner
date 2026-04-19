@@ -12,6 +12,7 @@ export type GameAction =
   | { type: 'SCOUT_DRAW'; from: 'troop' | 'tactic' }
   | { type: 'SCOUT_PICK'; chosen: Card }
   | { type: 'SCOUT_DISCARD_ORDER'; discards: [Card, Card] }
+  | { type: 'SCOUT_SKIP_DRAWS' }
   | { type: 'APPLY_TACTIC'; card: Card; flagIndex: number; player?: 'player' | 'opponent' }
   | { type: 'SET_GAME_STATUS'; status: 'playing' | 'playerWon' | 'opponentWon' }
   | { type: 'CLEAR_PENDING_TACTIC' }
@@ -60,6 +61,19 @@ export function reducer(state: GameState, action: GameAction): GameState {
         newState.playerHand = newState.playerHand.filter(c => c.id !== card.id);
       } else {
         newState.opponentHand = newState.opponentHand.filter(c => c.id !== card.id);
+      }
+
+      {
+        const colorLabel = card.color ? card.color[0].toUpperCase() + card.color.slice(1) : '';
+        const valueLabel = card.value !== undefined ? String(card.value) : '';
+        const cardLabel = card.name ?? ([colorLabel, valueLabel].filter(Boolean).join(' ') || 'card');
+        const moveRecord = {
+          summary: `Played ${cardLabel} on Flag ${flagIndex + 1}`,
+          highlightCardId: card.id,
+          highlightFlagIndex: flagIndex,
+        };
+        if (player === 'opponent') newState.lastOpponentMove = moveRecord;
+        else newState.lastPlayerMove = moveRecord;
       }
 
       applyFlagWinnerCheck(newState, flagIndex);
@@ -121,32 +135,35 @@ export function reducer(state: GameState, action: GameAction): GameState {
 
       newState.scoutDrawStep.drawn.push(card);
       newState.scoutDrawStep.remaining -= 1;
+      // New mechanic: drawn card goes directly into hand
+      newState.playerHand.push(card);
 
       return newState;
     }
 
     case 'SCOUT_PICK':
-      if (!newState.scoutDrawStep) return newState;
-
-      newState.scoutDrawStep.keep = action.chosen;
-      newState.scoutDrawStep.discards = newState.scoutDrawStep.drawn.filter(c => c.id !== action.chosen.id);
-      newState.playerHand.push(action.chosen);
-      // Do NOT increment playerTacticsPlayed here — picking a card from the Scout
-      // draw is not playing a new tactic. The counter was incremented when Scout
-      // was played via APPLY_TACTIC.
-
+      // No-op — the "keep 1" step was removed when Scout was redesigned.
       return newState;
 
-    case 'SCOUT_DISCARD_ORDER':
-      if (!newState.scoutDrawStep?.discards) return newState;
+    case 'SCOUT_SKIP_DRAWS':
+      if (!newState.scoutDrawStep) return newState;
+      newState.scoutDrawStep.remaining = 0;
+      return newState;
 
+    case 'SCOUT_DISCARD_ORDER': {
+      if (!newState.scoutDrawStep) return newState;
       const [first, second] = action.discards;
-
-      if (first.type === 'troop') newState.deck.unshift(second, first);
-      else newState.tacticsDeck.unshift(second, first);
-
+      // Remove both from hand
+      const discardIds = new Set([first.id, second.id]);
+      newState.playerHand = newState.playerHand.filter(c => !discardIds.has(c.id));
+      // Return each card to the top of its own deck
+      if (first.type === 'troop') newState.deck.unshift(first);
+      else newState.tacticsDeck.unshift(first);
+      if (second.type === 'troop') newState.deck.unshift(second);
+      else newState.tacticsDeck.unshift(second);
       newState.scoutDrawStep = null;
       return newState;
+    }
 
     case 'APPLY_TACTIC':
       return handleApplyTactic(newState, action.card, action.flagIndex, action.player ?? 'player');
