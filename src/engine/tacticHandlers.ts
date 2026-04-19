@@ -29,6 +29,7 @@ export function handleApplyTactic(
   newState: GameState,
   card: Card,
   flagIndex: number,
+  player: 'player' | 'opponent' = 'player',
 ): GameState {
   const flag = newState.flags[flagIndex];
 
@@ -37,8 +38,13 @@ export function handleApplyTactic(
     return newState;
   }
 
-  newState.playerHand = newState.playerHand.filter(c => c.id !== card.id);
-  newState.playerTacticsPlayed += 1;
+  if (player === 'player') {
+    newState.playerHand = newState.playerHand.filter(c => c.id !== card.id);
+    newState.playerTacticsPlayed += 1;
+  } else {
+    newState.opponentHand = newState.opponentHand.filter(c => c.id !== card.id);
+    newState.opponentTacticsPlayed += 1;
+  }
 
   switch (card.name) {
     case 'Fog':

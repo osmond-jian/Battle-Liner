@@ -69,6 +69,7 @@ export function GameBoard() {
 
   const isMultiplayer = !!multiplayerConfig;
   const isRealtimeMP  = multiplayerConfig?.transport === 'realtime';
+  const isHost        = !!multiplayerConfig?.isHost;
   const playerName    = multiplayerConfig?.localPlayer.username ?? 'You';
   const opponentName  = multiplayerConfig?.opponentName ?? 'CPU Bot';
 
@@ -105,14 +106,14 @@ export function GameBoard() {
     gameState.gameStatus === 'playing';
 
   return (
-    <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
+    <div className="h-[100dvh] bg-slate-950 text-white flex flex-col overflow-hidden">
 
       {/* ── Nav ────────────────────────────────────────────────────── */}
-      <nav className="flex items-center justify-between px-5 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
-        <span className="text-base font-black tracking-widest text-amber-400 uppercase select-none">
+      <nav className="flex items-center justify-between px-3 sm:px-5 py-2 sm:py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
+        <span className="text-sm sm:text-base font-black tracking-widest text-amber-400 uppercase select-none">
           Battle Line
         </span>
-        <div className="flex gap-2">
+        <div className="flex gap-1 sm:gap-2 items-center">
           {[
             { label: 'Rules',     action: openRules },
             { label: 'Reference', action: openGuide },
@@ -120,7 +121,7 @@ export function GameBoard() {
             <button
               key={label}
               onClick={action}
-              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+              className="hidden sm:inline-flex text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
             >
               {label}
             </button>
@@ -129,7 +130,7 @@ export function GameBoard() {
             <button
               onClick={onSave}
               disabled={currentTurn === 'opponent'}
-              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="hidden sm:inline-flex text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Save
             </button>
@@ -137,14 +138,14 @@ export function GameBoard() {
           {!isMultiplayer && (
             <button
               onClick={handleNewGame}
-              className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold transition"
+              className="text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold transition"
             >
               New Game
             </button>
           )}
           <button
             onClick={onExit}
-            className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 border border-slate-700 transition"
+            className="text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-400 border border-slate-700 transition"
           >
             Menu
           </button>
@@ -165,9 +166,11 @@ export function GameBoard() {
       <div className="flex-1 flex flex-col min-h-0 px-4 py-2 gap-2">
 
         {/* Opponent row */}
-        <div className="shrink-0 flex items-center gap-3">
-          <ProfileCard name={opponentName} isOpponent />
-          <div id="opponent-hand" className="flex-1 flex justify-center gap-1.5 flex-wrap">
+        <div className="shrink-0 flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:block">
+            <ProfileCard name={opponentName} isOpponent />
+          </div>
+          <div id="opponent-hand" className="flex-1 flex justify-center gap-1 sm:gap-1.5 flex-wrap">
             {gameState.opponentHand.map(card => (
               <motion.div
                 key={card.id}
@@ -178,44 +181,62 @@ export function GameBoard() {
                 <CardBack
                   id={`opponent-card-${card.id}`}
                   variant="troop"
-                  className="!w-11 !h-16"
+                  className="!w-8 !h-11 sm:!w-11 sm:!h-16"
                 />
               </motion.div>
             ))}
           </div>
-          {/* Mirror width of ProfileCard so hand stays perfectly centered */}
           <button
             onClick={openStats}
-            className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition shrink-0"
+            className="hidden sm:inline-flex text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition shrink-0"
           >
             Deck Stats
           </button>
         </div>
 
-        {/* Flags — centered, scrollable */}
-        <div className="flex-1 flex items-center justify-center overflow-x-auto flags-scroll min-h-0">
-          <div className="flex gap-0.5 px-2">
-            {gameState.flags.map((flag: FlagType, i: number) => (
-              <Flag
-                key={flag.id}
-                flag={flag}
-                flagIndex={i}
-                displaySlots={maxSlots}
-                selected={gameState.selectedFlag === i}
-                onCardPlace={() => handleFlagClick(i)}
-                deserterActive={gameState.deserterActive}
-                traitorActive={gameState.traitorActive}
-                onDeserterSelect={handleOpponentCardClick}
-                onTraitorSelect={handleOpponentCardClick}
-                pendingTraitor={gameState.pendingTraitor}
-                onTraitorDestination={handleTraitorPlace}
-              />
-            ))}
+        {/* Flags — scrollable in both directions; centered when space allows */}
+        <div className="flex-1 overflow-auto flags-scroll min-h-0">
+          <div className="flex min-h-full items-center justify-center">
+            <div className="flex gap-0.5 px-2 py-1">
+              {gameState.flags.map((flag: FlagType, i: number) => (
+                <Flag
+                  key={flag.id}
+                  flag={flag}
+                  flagIndex={i}
+                  displaySlots={maxSlots}
+                  selected={gameState.selectedFlag === i}
+                  onCardPlace={() => handleFlagClick(i)}
+                  deserterActive={gameState.deserterActive}
+                  traitorActive={gameState.traitorActive}
+                  onDeserterSelect={handleOpponentCardClick}
+                  onTraitorSelect={handleOpponentCardClick}
+                  pendingTraitor={gameState.pendingTraitor}
+                  onTraitorDestination={handleTraitorPlace}
+                />
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Deck strip — both decks centered below flags (draw is handled by DrawModal) */}
-        <div className="shrink-0 flex justify-center items-center gap-10">
+        {/* Deck strip — draw handled by DrawModal; display is purely informational */}
+        {/* Mobile: compact count pills */}
+        <div className="sm:hidden shrink-0 flex justify-center items-center gap-5 py-0.5">
+          <div id="deck-troop" className="flex items-center gap-1.5">
+            <div className="w-6 h-8 rounded bg-blue-950 border border-blue-800 flex items-center justify-center text-[11px] font-bold text-white leading-none">
+              {gameState.deck.length}
+            </div>
+            <span className="text-[11px] text-slate-500 uppercase tracking-wider">Troops</span>
+          </div>
+          <div className="w-px h-4 bg-slate-800" />
+          <div id="deck-tactic" className="flex items-center gap-1.5">
+            <div className="w-6 h-8 rounded bg-amber-950 border border-amber-800 flex items-center justify-center text-[11px] font-bold text-white leading-none">
+              {gameState.tacticsDeck.length}
+            </div>
+            <span className="text-[11px] text-slate-500 uppercase tracking-wider">Tactics</span>
+          </div>
+        </div>
+        {/* Desktop: full deck card visuals */}
+        <div className="hidden sm:flex shrink-0 justify-center items-center gap-10">
           <div id="deck-troop" className="flex flex-col items-center gap-1">
             <Deck cardsRemaining={gameState.deck.length} variant="troop" />
             <span className="text-[10px] text-slate-600 uppercase tracking-widest">Troops</span>
@@ -228,11 +249,15 @@ export function GameBoard() {
         </div>
 
         {/* Player hand */}
-        <div className="shrink-0 flex items-center gap-3">
-          <ProfileCard name={playerName} />
-          <div id="hand" className="flex-1 flex justify-center gap-1.5 flex-wrap">
+        <div className="shrink-0 flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:block">
+            <ProfileCard name={playerName} />
+          </div>
+          {/* Mobile: horizontal scroll; desktop: wrapping centered row */}
+          <div id="hand" className="flex-1 min-w-0 flex gap-1.5 overflow-x-auto sm:overflow-x-visible sm:flex-wrap sm:justify-center pb-0.5 sm:pb-0">
             {gameState.playerHand.map(card => (
-              <motion.div key={card.id} layout transition={{ layout: { duration: 0.25, ease: 'easeOut' } }}>
+              <motion.div key={card.id} layout transition={{ layout: { duration: 0.25, ease: 'easeOut' } }}
+                className="shrink-0">
                 <DraggableCard
                   card={card}
                   selected={gameState.selectedCard?.id === card.id}
@@ -243,21 +268,23 @@ export function GameBoard() {
               </motion.div>
             ))}
           </div>
-          {/* Auto-sort controls */}
+          {/* Auto-sort controls — abbreviated labels on mobile */}
           <div className="flex flex-col gap-1 shrink-0">
             <button
               onClick={() => handleSortHand('value')}
               title="Sort hand by card value"
-              className="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition"
+              className="text-xs px-1.5 sm:px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition"
             >
-              ↑ Value
+              <span className="hidden sm:inline">↑ Value</span>
+              <span className="sm:hidden">↑V</span>
             </button>
             <button
               onClick={() => handleSortHand('color')}
               title="Sort hand by color, then value"
-              className="text-xs px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition"
+              className="text-xs px-1.5 sm:px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition"
             >
-              ⬛ Color
+              <span className="hidden sm:inline">⬛ Color</span>
+              <span className="sm:hidden">⬛C</span>
             </button>
           </div>
         </div>

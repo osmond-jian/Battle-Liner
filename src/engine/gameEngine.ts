@@ -12,7 +12,7 @@ export type GameAction =
   | { type: 'SCOUT_DRAW'; from: 'troop' | 'tactic' }
   | { type: 'SCOUT_PICK'; chosen: Card }
   | { type: 'SCOUT_DISCARD_ORDER'; discards: [Card, Card] }
-  | { type: 'APPLY_TACTIC'; card: Card; flagIndex: number }
+  | { type: 'APPLY_TACTIC'; card: Card; flagIndex: number; player?: 'player' | 'opponent' }
   | { type: 'SET_GAME_STATUS'; status: 'playing' | 'playerWon' | 'opponentWon' }
   | { type: 'CLEAR_PENDING_TACTIC' }
   | { type: 'SET_PENDING_TACTIC'; card: Card; flagIndex: number }
@@ -85,10 +85,11 @@ export function reducer(state: GameState, action: GameAction): GameState {
         if (card) {
           newState.tacticsDeck = rest;
           if (isOpponent) {
-            newState.opponentHand.push(card); // Adjust this if opponent can't use tactics
+            newState.opponentHand.push(card);
           } else {
             newState.playerHand.push(card);
-            newState.playerTacticsPlayed += 1;
+            // Drawing a tactic card does NOT count as playing one.
+            // playerTacticsPlayed is incremented in APPLY_TACTIC instead.
           }
         }
       }
@@ -148,7 +149,7 @@ export function reducer(state: GameState, action: GameAction): GameState {
       return newState;
 
     case 'APPLY_TACTIC':
-      return handleApplyTactic(newState, action.card, action.flagIndex);
+      return handleApplyTactic(newState, action.card, action.flagIndex, action.player ?? 'player');
 
 
     case 'SET_PENDING_TACTIC':

@@ -63,7 +63,7 @@ export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePe
    * Setting connRef.current happens here so it's cleared before onConnLost fires.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const setupConnection = useCallback((conn: any, onConnLost: () => void) => {
+  const setupConnection = useCallback((conn: any, onConnLost: () => void, onOpen?: () => void) => {
     connRef.current = conn;
 
     // Guard so close + error don't both fire onConnLost.
@@ -78,6 +78,8 @@ export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePe
     conn.on('open', () => {
       if (destroyedRef.current) return;
       updateStatus('connected');
+      // Called after the channel is confirmed open so any immediate sends succeed.
+      onOpen?.();
     });
 
     conn.on('data', (raw: unknown) => {
@@ -156,15 +158,14 @@ export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePe
           didHaveConnectionRef.current = true;
           setHadGuest(true);
 
-          setupConnection(conn, () => {
+          setupConnection(
+            conn,
             // On disconnect: go back to waiting so the same guest can reconnect.
-            if (!destroyedRef.current) updateStatus('waiting');
-          });
-
-          if (isReconnect) {
-            // Guest reconnected after a drop — tell GameManager to send RESYNC_STATE.
-            onGuestReconnectRef.current?.();
-          }
+            () => { if (!destroyedRef.current) updateStatus('waiting'); },
+            // On open: if this is a reconnect, notify GameManager to send RESYNC_STATE.
+            // Must fire AFTER the channel is open so sendResync's conn.open check passes.
+            isReconnect ? () => onGuestReconnectRef.current?.() : undefined,
+          );
         });
       }
 
