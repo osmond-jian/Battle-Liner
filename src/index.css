@@ -7,9 +7,10 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Thin scrollbar for the flags row */
+/* Thin scrollbar for the flags area (horizontal and vertical) */
 .flags-scroll::-webkit-scrollbar {
   height: 4px;
+  width: 4px;
 }
 .flags-scroll::-webkit-scrollbar-track {
   background: transparent;
