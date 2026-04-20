@@ -57,7 +57,7 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
   // ── P2P connection ───────────────────────────────────────────────────────
   // usePeer is always called (hooks can't be conditional).
   // When roomCode is '__noop__' the hook exits early and returns idle status.
-  const { status: peerStatus, hadGuest, sendState, sendInitState, sendResync } = usePeer({
+  const { status: peerStatus, hadGuest, retryCount: peerRetryCount, lastError: peerLastError, sendState, sendInitState, sendResync } = usePeer({
     isHost,
     roomCode: multiplayerConfig?.roomCode ?? '__noop__',
     onMessage: (msg) => onMessageRef.current(msg),
@@ -222,6 +222,8 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
       multiplayerConfig,
       peerStatus,
       hadGuest,
+      peerRetryCount,
+      peerLastError,
       advanceToPlayerTurn: turn.advanceToPlayerTurn,
     }}>
       <GameBoard />

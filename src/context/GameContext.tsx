@@ -47,6 +47,8 @@ interface GameContextValue {
   peerStatus: PeerStatus;
   /** True once the host has received at least one guest connection. */
   hadGuest: boolean;
+  peerRetryCount: number;
+  peerLastError: string | null;
   advanceToPlayerTurn: () => void;
 
   // UI-only modal visibility
