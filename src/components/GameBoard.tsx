@@ -197,34 +197,41 @@ export function GameBoard() {
             <div className="flex min-h-full items-center justify-center">
               <div className="flex gap-0.5 px-2 py-1">
                 {/* ── Tactics graveyard column ── */}
-                <div className="flex flex-col items-center gap-1 px-1 py-2 w-[88px] shrink-0">
-                  {/* Opponent played tactics */}
+                <div className="flex flex-col items-center gap-1 px-1 py-2 w-[88px] shrink-0 select-none border-r border-slate-800/50 mr-0.5">
+                  {/* Opponent tactics — same row count as flag card areas */}
                   <div className="flex flex-col items-center gap-0.5 w-full">
-                    {gameState.opponentPlayedTactics.length === 0 ? (
-                      <div className="w-full h-7 rounded border border-dashed border-white/10" />
-                    ) : (
-                      gameState.opponentPlayedTactics.map(c => (
-                        <Card key={c.id} card={c} condensed className="opacity-70" />
-                      ))
-                    )}
+                    {Array.from({ length: maxSlots }).map((_, i) => {
+                      const c = gameState.opponentPlayedTactics[i];
+                      return c
+                        ? <Card key={c.id} card={c} condensed className="opacity-75" />
+                        : <div key={i} className="w-full h-7 rounded border border-dashed border-white/[0.06]" />;
+                    })}
+                    {gameState.opponentPlayedTactics.slice(maxSlots).map(c => (
+                      <Card key={c.id} card={c} condensed className="opacity-75" />
+                    ))}
                   </div>
-                  {/* Label */}
-                  <div className="flex flex-col items-center my-0.5">
-                    <div className="w-10 rounded-t-sm py-0.5 flex items-center justify-center text-[9px] font-bold shadow-sm bg-slate-700 text-slate-400">
-                      Played
+
+                  {/* Center badge — fixed height to match flag center (banner+pole+base ≈ 58px) */}
+                  <div className="flex flex-col items-center justify-center my-0.5" style={{ height: '58px' }}>
+                    <div className="w-px h-2.5 bg-slate-700/60" />
+                    <div className="w-8 h-8 rounded-full bg-slate-800/80 border border-slate-600/60 flex items-center justify-center text-[15px] leading-none shadow-sm">
+                      📜
                     </div>
-                    <div className="w-1.5 rounded-full bg-slate-600" style={{ height: '32px' }} />
-                    <div className="w-6 h-1.5 rounded-full bg-slate-700" />
+                    <div className="w-px h-2.5 bg-slate-700/60" />
+                    <span className="text-[7px] font-bold tracking-[0.15em] text-slate-600 uppercase mt-0.5">Used</span>
                   </div>
-                  {/* Player played tactics */}
+
+                  {/* Player tactics */}
                   <div className="flex flex-col items-center gap-0.5 w-full">
-                    {gameState.playerPlayedTactics.length === 0 ? (
-                      <div className="w-full h-7 rounded border border-dashed border-white/10" />
-                    ) : (
-                      gameState.playerPlayedTactics.map(c => (
-                        <Card key={c.id} card={c} condensed className="opacity-70" />
-                      ))
-                    )}
+                    {Array.from({ length: maxSlots }).map((_, i) => {
+                      const c = gameState.playerPlayedTactics[i];
+                      return c
+                        ? <Card key={c.id} card={c} condensed className="opacity-75" />
+                        : <div key={i} className="w-full h-7 rounded border border-dashed border-white/[0.06]" />;
+                    })}
+                    {gameState.playerPlayedTactics.slice(maxSlots).map(c => (
+                      <Card key={c.id} card={c} condensed className="opacity-75" />
+                    ))}
                   </div>
                 </div>
 
