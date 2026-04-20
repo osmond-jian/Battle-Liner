@@ -10,7 +10,7 @@ export function Deck({ cardsRemaining, variant = 'troop' }: DeckProps) {
   const isEmpty = cardsRemaining === 0;
 
   return (
-    <div className="flex flex-col items-center gap-1.5">
+    <div className="flex flex-col items-center gap-1">
       {/* Stacked shadow cards for depth effect */}
       <div className="relative">
         {cardsRemaining > 4 && (
@@ -23,13 +23,12 @@ export function Deck({ cardsRemaining, variant = 'troop' }: DeckProps) {
             ${isTactic ? 'border-amber-700 bg-amber-950' : 'border-blue-800 bg-blue-950'}`}
           />
         )}
-        <CardBack variant={variant} className={isEmpty ? 'opacity-25 grayscale' : ''}>
-          <span className={`font-bold text-xl select-none ${isEmpty ? 'text-gray-500' : 'text-white'}`}>
-            {cardsRemaining}
-          </span>
-        </CardBack>
+        <CardBack variant={variant} className={isEmpty ? 'opacity-25 grayscale' : ''} />
       </div>
-      <span className={`text-[11px] font-medium tracking-wide ${isEmpty ? 'text-slate-600' : 'text-slate-400'}`}>
+      <span className={`font-bold text-base select-none leading-none ${isEmpty ? 'text-slate-600' : 'text-white'}`}>
+        {cardsRemaining}
+      </span>
+      <span className={`text-[10px] font-medium tracking-wide leading-none ${isEmpty ? 'text-slate-700' : 'text-slate-500'}`}>
         {isTactic ? 'Tactics' : 'Troop'}
       </span>
     </div>

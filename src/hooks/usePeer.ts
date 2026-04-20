@@ -20,13 +20,17 @@ interface UsePeerReturn {
   /** True once the host has had at least one guest connection (used for
    *  'waiting' UI: show reconnect hint instead of initial room-code prompt). */
   hadGuest: boolean;
+  /** Current reconnection attempt index (0-based). Only meaningful when status === 'reconnecting'. */
+  retryCount: number;
+  /** Last raw error string captured from PeerJS — peer-level or connection-level. */
+  lastError: string | null;
   sendState: (gameState: GameState) => void;
   sendInitState: (gameState: GameState, guestGoesFirst: boolean) => void;
   sendResync: (gameState: GameState, isGuestTurn: boolean) => void;
 }
 
 /** Max number of automatic reconnection attempts the guest will make. */
-const MAX_RETRIES = 10;
+export const MAX_RETRIES = 10;
 
 export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePeerParams): UsePeerReturn {
   const [status, setStatus] = useState<PeerStatus>('idle');
@@ -49,6 +53,8 @@ export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePe
   // distinguish the initial guest connection from a later reconnection).
   const didHaveConnectionRef = useRef(false);
   const [hadGuest, setHadGuest] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   // Timer handle for the guest's reconnect backoff.
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -93,6 +99,9 @@ export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePe
     conn.on('close', notifyLost);
 
     conn.on('error', (err: unknown) => {
+      const type = (err as { type?: string })?.type ?? 'connection-error';
+      const message = (err as Error)?.message ?? '';
+      setLastError(message ? `${type}: ${message}` : type);
       console.error('[usePeer] connection error', err);
       notifyLost();
     });
@@ -111,22 +120,36 @@ export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePe
 
       const peerId = isHost ? `battleline-${roomCode}` : undefined;
 
+      // ICE servers: multiple STUN + TURN relay for cross-network NAT traversal.
+      // Without TURN, symmetric NAT / CGNAT connections always fail.
+      const iceServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        // Open Relay — free community TURN servers (no account required)
+        { urls: 'turn:openrelay.metered.ca:80',           username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443',          username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+      ];
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const peer = new (Peer as any)(peerId, {
         debug: import.meta.env.DEV ? 2 : 0,
+        config: { iceServers },
       });
       peerRef.current = peer;
 
       // ── Guest: attempt connection with automatic retry on failure ──────────
-      const attemptConnect = (retryCount: number) => {
+      const attemptConnect = (attempt: number) => {
         if (destroyedRef.current) return;
+        setRetryCount(attempt);
         const conn = peer.connect(`battleline-${roomCode}`, { reliable: true });
         setupConnection(conn, () => {
           if (destroyedRef.current) return;
-          if (retryCount < MAX_RETRIES) {
+          if (attempt < MAX_RETRIES) {
             updateStatus('reconnecting');
             retryTimerRef.current = setTimeout(
-              () => attemptConnect(retryCount + 1),
+              () => attemptConnect(attempt + 1),
               3000,
             );
           } else {
@@ -170,6 +193,9 @@ export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePe
       }
 
       peer.on('error', (err: unknown) => {
+        const type = (err as { type?: string })?.type ?? 'unknown';
+        const message = (err as Error)?.message ?? '';
+        setLastError(message ? `${type}: ${message}` : type);
         console.error('[usePeer] peer error', err);
         if (!destroyedRef.current) updateStatus('error');
       });
@@ -221,5 +247,5 @@ export function usePeer({ isHost, roomCode, onMessage, onGuestReconnect }: UsePe
     conn.send(msg);
   }, []);
 
-  return { status, hadGuest, sendState, sendInitState, sendResync };
+  return { status, hadGuest, retryCount, lastError, sendState, sendInitState, sendResync };
 }

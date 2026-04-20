@@ -26,6 +26,8 @@ export function flipGameStatePerspective(state: GameState): GameState {
             : f.winner === 'opponent' ? 'player'
             : null,
     })),
+    playerPlayedTactics:   state.opponentPlayedTactics,
+    opponentPlayedTactics: state.playerPlayedTactics,
     // Selection and pending modal states are local-only — always clear on receipt.
     selectedCard:      null,
     selectedFlag:      null,

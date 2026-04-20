@@ -1,4 +1,4 @@
-This is a web app for the card game, "Battle Line". It's a personal project that will allow some friends to play the game online.
+This is a web app for the card game, "Battle Line". It's a personal project that will allow some friends to play the game online. The multiplayer works by P2P, so it is very lightweight and does not need an additional server. If you enjoy the game, we recommend you buy a physical copy of the Battle Line card game as well.
 
 Here's how to start the app:
 1. Install the dependencies with yarn or npm
@@ -30,8 +30,3 @@ yarn run dev
 3. Enjoy! If you want to deploy the site, follow the instructions on the hosting platform. Github pages will need to use github actions and a .yaml file.
 
 
-The project is still a work in progress. Here are some major tasks that still need to be done:
-
-1. Add multiplayer functionalities - allow players to join lobbies and host games.
-2. Improve the look of the cards
-3. Add a user login platform.

@@ -3,6 +3,7 @@ import { getSlotCount } from '../utils/gameLogic';
 import { motion } from 'framer-motion';
 import { useGameContext } from '../context/GameContext';
 import type { Flag as FlagType } from '../types/game';
+import { Card } from './Card';
 import { DraggableCard } from './DraggableCard';
 import { CardBack } from './CardBack';
 import { CardFly } from './CardFly';
@@ -20,6 +21,37 @@ import { DeserterModal } from './DeserterModal';
 import { TraitorCaptureModal } from './TraitorCaptureModal';
 import { TraitorPlaceModal } from './TraitorPlaceModal';
 import { VictoryModal } from './VictoryModal';
+import { MAX_RETRIES } from '../hooks/usePeer';
+
+function errorSummary(err: string | null): string {
+  const type = err?.split(':')[0] ?? '';
+  switch (type) {
+    case 'peer-unavailable': return 'Room not found';
+    case 'webrtc':           return 'WebRTC negotiation failed';
+    case 'network':          return 'Network error';
+    case 'server-error':     return 'Signaling server error';
+    case 'socket-error':
+    case 'socket-closed':    return 'Lost connection to signaling server';
+    case 'negotiation-failed': return 'ICE negotiation failed';
+    case 'browser-incompatible': return 'Browser not supported';
+    default:                 return 'Connection error';
+  }
+}
+
+function errorHint(err: string | null): string {
+  const type = err?.split(':')[0] ?? '';
+  switch (type) {
+    case 'peer-unavailable': return 'The room code may be wrong, or the host has not started the game yet.';
+    case 'webrtc':           return 'This is usually caused by strict NAT or a firewall. Try a different network or disable a VPN.';
+    case 'network':          return 'Check your internet connection and try again.';
+    case 'server-error':     return 'The PeerJS signaling server returned an error. Try again in a moment.';
+    case 'socket-error':
+    case 'socket-closed':    return 'The connection to the signaling server was interrupted.';
+    case 'negotiation-failed': return 'Could not establish a direct or relayed path. Try a different network or disable a VPN.';
+    case 'browser-incompatible': return 'WebRTC is not available in this browser. Try Chrome or Firefox.';
+    default:                 return 'An unexpected connection error occurred.';
+  }
+}
 
 export function GameBoard() {
   const {
@@ -33,7 +65,7 @@ export function GameBoard() {
     handleOpponentCardClick,
     handleRedeployConfirm,
     handleScoutDraw,
-    handleScoutChoose,
+    handleScoutSkipDraws,
     handleScoutDiscard,
     handleTacticsConfigConfirm,
     handleTacticsCancel,
@@ -65,11 +97,14 @@ export function GameBoard() {
     multiplayerConfig,
     peerStatus,
     hadGuest,
+    peerRetryCount,
+    peerLastError,
   } = useGameContext();
 
   const isMultiplayer = !!multiplayerConfig;
   const isRealtimeMP  = multiplayerConfig?.transport === 'realtime';
   const isHost        = !!multiplayerConfig?.isHost;
+  const [showConnDetails, setShowConnDetails] = useState(false);
   const playerName    = multiplayerConfig?.localPlayer.username ?? 'You';
   const opponentName  = multiplayerConfig?.opponentName ?? 'CPU Bot';
 
@@ -163,7 +198,7 @@ export function GameBoard() {
       </div>
 
       {/* ── Main play area ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-h-0 px-4 py-2 gap-2">
+      <div className="flex-1 flex flex-col min-h-0 px-2 sm:px-4 py-2 gap-2">
 
         {/* Opponent row */}
         <div className="shrink-0 flex items-center gap-2 sm:gap-3">
@@ -186,66 +221,122 @@ export function GameBoard() {
               </motion.div>
             ))}
           </div>
-          <button
-            onClick={openStats}
-            className="hidden sm:inline-flex text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 transition shrink-0"
-          >
-            Deck Stats
-          </button>
         </div>
 
-        {/* Flags — scrollable in both directions; centered when space allows */}
-        <div className="flex-1 overflow-auto flags-scroll min-h-0">
-          <div className="flex min-h-full items-center justify-center">
-            <div className="flex gap-0.5 px-2 py-1">
-              {gameState.flags.map((flag: FlagType, i: number) => (
-                <Flag
-                  key={flag.id}
-                  flag={flag}
-                  flagIndex={i}
-                  displaySlots={maxSlots}
-                  selected={gameState.selectedFlag === i}
-                  onCardPlace={() => handleFlagClick(i)}
-                  deserterActive={gameState.deserterActive}
-                  traitorActive={gameState.traitorActive}
-                  onDeserterSelect={handleOpponentCardClick}
-                  onTraitorSelect={handleOpponentCardClick}
-                  pendingTraitor={gameState.pendingTraitor}
-                  onTraitorDestination={handleTraitorPlace}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+        {/* Flags + Deck side panel — deck is always visible on the right edge */}
+        <div className="flex-1 flex min-h-0 gap-1 sm:gap-2">
 
-        {/* Deck strip — draw handled by DrawModal; display is purely informational */}
-        {/* Mobile: compact count pills */}
-        <div className="sm:hidden shrink-0 flex justify-center items-center gap-5 py-0.5">
-          <div id="deck-troop" className="flex items-center gap-1.5">
-            <div className="w-6 h-8 rounded bg-blue-950 border border-blue-800 flex items-center justify-center text-[11px] font-bold text-white leading-none">
-              {gameState.deck.length}
+          {/* Flags — scrollable in both directions; centered when space allows */}
+          <div className="flex-1 overflow-auto flags-scroll min-h-0">
+            <div className="flex min-h-full items-center justify-center">
+              <div className="flex gap-0.5 px-2 py-1">
+                {/* ── Tactics graveyard column ── */}
+                <div className="flex flex-col items-center gap-1 px-1 py-2 w-[88px] shrink-0 select-none border-r border-slate-800/50 mr-0.5">
+                  {/* Opponent tactics — same row count as flag card areas */}
+                  <div className="flex flex-col items-center gap-0.5 w-full">
+                    {Array.from({ length: maxSlots }).map((_, i) => {
+                      const c = gameState.opponentPlayedTactics[i];
+                      return c
+                        ? <Card key={c.id} card={c} condensed className="opacity-75" />
+                        : <div key={i} className="w-full h-7 rounded border border-dashed border-white/[0.06]" />;
+                    })}
+                    {gameState.opponentPlayedTactics.slice(maxSlots).map(c => (
+                      <Card key={c.id} card={c} condensed className="opacity-75" />
+                    ))}
+                  </div>
+
+                  {/* Center badge — fixed height to match flag center (banner+pole+base ≈ 58px) */}
+                  <div className="flex flex-col items-center justify-center my-0.5" style={{ height: '58px' }}>
+                    <div className="w-px h-2.5 bg-slate-700/60" />
+                    <div className="w-8 h-8 rounded-full bg-slate-800/80 border border-slate-600/60 flex items-center justify-center text-[15px] leading-none shadow-sm">
+                      📜
+                    </div>
+                    <div className="w-px h-2.5 bg-slate-700/60" />
+                    <span className="text-[7px] font-bold tracking-[0.15em] text-slate-600 uppercase mt-0.5">Used</span>
+                  </div>
+
+                  {/* Player tactics */}
+                  <div className="flex flex-col items-center gap-0.5 w-full">
+                    {Array.from({ length: maxSlots }).map((_, i) => {
+                      const c = gameState.playerPlayedTactics[i];
+                      return c
+                        ? <Card key={c.id} card={c} condensed className="opacity-75" />
+                        : <div key={i} className="w-full h-7 rounded border border-dashed border-white/[0.06]" />;
+                    })}
+                    {gameState.playerPlayedTactics.slice(maxSlots).map(c => (
+                      <Card key={c.id} card={c} condensed className="opacity-75" />
+                    ))}
+                  </div>
+                </div>
+
+                {gameState.flags.map((flag: FlagType, i: number) => (
+                  <Flag
+                    key={flag.id}
+                    flag={flag}
+                    flagIndex={i}
+                    displaySlots={maxSlots}
+                    selected={gameState.selectedFlag === i}
+                    onCardPlace={() => handleFlagClick(i)}
+                    deserterActive={gameState.deserterActive}
+                    traitorActive={gameState.traitorActive}
+                    onDeserterSelect={handleOpponentCardClick}
+                    onTraitorSelect={handleOpponentCardClick}
+                    pendingTraitor={gameState.pendingTraitor}
+                    onTraitorDestination={handleTraitorPlace}
+                    lastOpponentHighlightCardId={
+                      currentTurn !== 'opponent'
+                        ? gameState.lastOpponentMove?.highlightCardId
+                        : undefined
+                    }
+                    lastPlayerHighlightCardId={
+                      currentTurn === 'opponent'
+                        ? gameState.lastPlayerMove?.highlightCardId
+                        : undefined
+                    }
+                  />
+                ))}
+              </div>
             </div>
-            <span className="text-[11px] text-slate-500 uppercase tracking-wider">Troops</span>
           </div>
-          <div className="w-px h-4 bg-slate-800" />
-          <div id="deck-tactic" className="flex items-center gap-1.5">
-            <div className="w-6 h-8 rounded bg-amber-950 border border-amber-800 flex items-center justify-center text-[11px] font-bold text-white leading-none">
-              {gameState.tacticsDeck.length}
+
+          {/* Deck side panel — fixed right edge, not part of flag scroll */}
+          <div className="shrink-0 flex flex-col justify-center items-center gap-2 px-1 sm:px-2 border-l border-slate-800/60">
+            {/* Mobile: compact mini-card representations */}
+            <div className="sm:hidden flex flex-col items-center gap-3">
+              <div id="deck-troop" className="flex flex-col items-center gap-0.5">
+                <div className={`w-7 h-10 rounded border ${gameState.deck.length === 0 ? 'bg-slate-900 border-slate-800 opacity-40' : 'bg-blue-950 border-blue-800'}`} />
+                <span className={`text-[11px] font-bold leading-none ${gameState.deck.length === 0 ? 'text-slate-600' : 'text-blue-300'}`}>
+                  {gameState.deck.length}
+                </span>
+                <span className="text-[9px] text-slate-600 uppercase tracking-wider leading-none">Trp</span>
+              </div>
+              <div className="w-4 h-px bg-slate-800" />
+              <div id="deck-tactic" className="flex flex-col items-center gap-0.5">
+                <div className={`w-7 h-10 rounded border ${gameState.tacticsDeck.length === 0 ? 'bg-slate-900 border-slate-800 opacity-40' : 'bg-amber-950 border-amber-800'}`} />
+                <span className={`text-[11px] font-bold leading-none ${gameState.tacticsDeck.length === 0 ? 'text-slate-600' : 'text-amber-300'}`}>
+                  {gameState.tacticsDeck.length}
+                </span>
+                <span className="text-[9px] text-slate-600 uppercase tracking-wider leading-none">Tac</span>
+              </div>
             </div>
-            <span className="text-[11px] text-slate-500 uppercase tracking-wider">Tactics</span>
+            {/* Desktop: full Deck card visuals */}
+            <div className="hidden sm:flex flex-col items-center gap-3">
+              <div id="deck-troop">
+                <Deck cardsRemaining={gameState.deck.length} variant="troop" />
+              </div>
+              <div className="w-8 h-px bg-slate-800" />
+              <div id="deck-tactic">
+                <Deck cardsRemaining={gameState.tacticsDeck.length} variant="tactic" />
+              </div>
+              <button
+                onClick={openStats}
+                className="text-[10px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-500 border border-slate-700 transition"
+              >
+                Stats
+              </button>
+            </div>
           </div>
-        </div>
-        {/* Desktop: full deck card visuals */}
-        <div className="hidden sm:flex shrink-0 justify-center items-center gap-10">
-          <div id="deck-troop" className="flex flex-col items-center gap-1">
-            <Deck cardsRemaining={gameState.deck.length} variant="troop" />
-            <span className="text-[10px] text-slate-600 uppercase tracking-widest">Troops</span>
-          </div>
-          <div className="w-px h-10 bg-slate-800" />
-          <div id="deck-tactic" className="flex flex-col items-center gap-1">
-            <Deck cardsRemaining={gameState.tacticsDeck.length} variant="tactic" />
-            <span className="text-[10px] text-slate-600 uppercase tracking-widest">Tactics</span>
-          </div>
+
         </div>
 
         {/* Player hand */}
@@ -288,6 +379,24 @@ export function GameBoard() {
             </button>
           </div>
         </div>
+
+        {/* Last move info — shown below the player hand */}
+        {(gameState.lastOpponentMove || gameState.lastPlayerMove) && (
+          <div className="shrink-0 flex flex-wrap gap-x-4 gap-y-0.5 px-1 text-[11px] leading-tight">
+            {gameState.lastOpponentMove && currentTurn !== 'opponent' && (
+              <span className="min-w-0 truncate text-red-400/80">
+                <span className="font-semibold text-red-500">{opponentName}: </span>
+                {gameState.lastOpponentMove.summary}
+              </span>
+            )}
+            {gameState.lastPlayerMove && (
+              <span className="min-w-0 truncate text-emerald-400/80 ml-auto">
+                <span className="font-semibold text-emerald-500">You: </span>
+                {gameState.lastPlayerMove.summary}
+              </span>
+            )}
+          </div>
+        )}
 
       </div>
 
@@ -367,12 +476,13 @@ export function GameBoard() {
         <ScoutDrawModal
           drawn={gameState.scoutDrawStep.drawn}
           remaining={gameState.scoutDrawStep.remaining}
-          keep={gameState.scoutDrawStep.keep}
-          discards={gameState.scoutDrawStep.discards}
+          playerHand={gameState.playerHand}
+          troopDeckEmpty={gameState.deck.length === 0}
+          tacticDeckEmpty={gameState.tacticsDeck.length === 0}
           onDrawFromTroop={() => handleScoutDraw('troop')}
           onDrawFromTactic={() => handleScoutDraw('tactic')}
-          onPickFinal={handleScoutChoose}
-          onDiscardSelect={handleScoutDiscard}
+          onSkipDraws={handleScoutSkipDraws}
+          onDiscardConfirm={handleScoutDiscard}
           onCancel={handleTacticsCancel}
         />
       )}
@@ -464,9 +574,10 @@ export function GameBoard() {
       {/* ── P2P: not yet connected (waiting / connecting / error) ── */}
       {isRealtimeMP && peerStatus !== 'connected' && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl px-8 py-6 shadow-2xl text-center max-w-sm mx-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl px-8 py-6 shadow-2xl text-center max-w-sm mx-4 space-y-4">
+
             {peerStatus === 'waiting' && (
-              <>
+              <div>
                 <p className="text-amber-400 font-bold text-sm mb-2">
                   {hadGuest ? 'Opponent disconnected — waiting to reconnect…' : 'Waiting for opponent…'}
                 </p>
@@ -475,30 +586,73 @@ export function GameBoard() {
                     ? 'Ask them to re-enter the room code:'
                     : <>Share this room code with{' '}<span className="text-white font-semibold">{opponentName}</span>:</>}
                 </p>
-                <p className="font-mono text-3xl text-amber-400 tracking-[0.3em] font-black mb-5 select-all">
+                <p className="font-mono text-3xl text-amber-400 tracking-[0.3em] font-black select-all">
                   {multiplayerConfig!.roomCode}
                 </p>
-              </>
+              </div>
             )}
-            {peerStatus === 'connecting' && (
-              <p className="text-slate-300 text-sm mb-5">Connecting to game…</p>
-            )}
-            {peerStatus === 'reconnecting' && (
-              <p className="text-amber-400 text-sm mb-5">Connection lost — reconnecting…</p>
-            )}
-            {peerStatus === 'disconnected' && (
-              <p className="text-red-400 text-sm mb-5">
-                {isHost ? 'Connection error.' : 'Disconnected — could not reconnect.'}
-              </p>
-            )}
-            {peerStatus === 'error' && (
-              <p className="text-red-400 text-sm mb-5">
-                Connection error — room may be full or unavailable.
-              </p>
-            )}
+
             {peerStatus === 'idle' && (
-              <p className="text-slate-400 text-sm mb-5">Initializing…</p>
+              <p className="text-slate-400 text-sm">Initializing…</p>
             )}
+
+            {peerStatus === 'connecting' && (
+              <div>
+                <p className="text-slate-300 text-sm font-semibold">Connecting to game…</p>
+                <p className="text-xs text-slate-500 mt-1">Establishing WebRTC connection.</p>
+              </div>
+            )}
+
+            {peerStatus === 'reconnecting' && (
+              <div>
+                <p className="text-amber-400 text-sm font-semibold">Connection lost — reconnecting…</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Attempt {peerRetryCount + 1} of {MAX_RETRIES} · retrying every 3s
+                </p>
+              </div>
+            )}
+
+            {peerStatus === 'disconnected' && (
+              <div>
+                <p className="text-red-400 text-sm font-semibold">
+                  {isHost ? 'Opponent could not reconnect.' : `Could not connect after ${MAX_RETRIES} attempts.`}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {isHost
+                    ? 'The guest may have closed the game.'
+                    : 'This is usually a NAT or firewall issue. Try a different network, or disable a VPN if active.'}
+                </p>
+              </div>
+            )}
+
+            {peerStatus === 'error' && (
+              <div>
+                <p className="text-red-400 text-sm font-semibold">
+                  {errorSummary(peerLastError)}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {errorHint(peerLastError)}
+                </p>
+              </div>
+            )}
+
+            {/* Details toggle — shown for states that have diagnostic info */}
+            {(peerStatus === 'reconnecting' || peerStatus === 'disconnected' || peerStatus === 'error') && peerLastError && (
+              <div className="text-left">
+                <button
+                  onClick={() => setShowConnDetails(v => !v)}
+                  className="text-xs text-slate-500 hover:text-slate-300 transition"
+                >
+                  {showConnDetails ? '▲ Hide details' : '▼ Show details'}
+                </button>
+                {showConnDetails && (
+                  <div className="mt-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-400 font-mono break-all">
+                    {peerLastError}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               onClick={onExit}
               className="text-xs px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition"

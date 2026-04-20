@@ -33,6 +33,12 @@ export interface Flag {
  * Single canonical game state type used by the reducer, context, and all components.
  * (Previously split across GameState and FullGameState — now unified.)
  */
+export interface LastOpponentMove {
+  summary: string;
+  highlightCardId?: string;
+  highlightFlagIndex?: number;
+}
+
 export interface GameState {
   gameStatus: 'playing' | 'playerWon' | 'opponentWon';
   playerHand: Card[];
@@ -55,7 +61,11 @@ export interface GameState {
   scoutDrawStep: {
     drawn: Card[];
     remaining: number;
-    keep?: Card;
-    discards?: Card[];
+    /** Cards the player has selected to return to decks (phase 2 of new Scout flow). */
+    discardPicks?: Card[];
   } | null;
+  lastOpponentMove?: LastOpponentMove | null;
+  lastPlayerMove?: LastOpponentMove | null;
+  playerPlayedTactics: Card[];
+  opponentPlayedTactics: Card[];
 }

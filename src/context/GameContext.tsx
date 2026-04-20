@@ -22,8 +22,8 @@ interface GameContextValue {
   handleOpponentCardClick: (card: CardType, flagIndex: number) => void;
   handleRedeployConfirm: (sourceFlagIndex: number, cardIndex: number, destinationFlagIndex: number | null) => void;
   handleScoutDraw: (deckType: 'troop' | 'tactic') => void;
-  handleScoutChoose: (card: CardType) => void;
-  handleScoutDiscard: (card: CardType) => void;
+  handleScoutSkipDraws: () => void;
+  handleScoutDiscard: (cards: [CardType, CardType]) => void;
   handleTacticsConfigConfirm: (color: string, value: number) => void;
   handleTacticsCancel: () => void;
   handleTraitorPlace: (toFlagIndex: number) => void;
@@ -47,6 +47,8 @@ interface GameContextValue {
   peerStatus: PeerStatus;
   /** True once the host has received at least one guest connection. */
   hadGuest: boolean;
+  peerRetryCount: number;
+  peerLastError: string | null;
   advanceToPlayerTurn: () => void;
 
   // UI-only modal visibility
