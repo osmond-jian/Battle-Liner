@@ -15,7 +15,7 @@ const log = {
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+const CORS_ORIGIN: string | true = process.env.CORS_ORIGIN ?? true;
 const PORT = Number(process.env.PORT) || 3001;
 const MAX_GAMESTATE_BYTES = 256 * 1024; // 256 KB
 
