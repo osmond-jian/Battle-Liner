@@ -170,7 +170,11 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
         )}
         {serverStatus === 'error' && (
           <div className="bg-red-900/30 border border-red-700/50 rounded-xl px-4 py-3 mb-4 text-xs text-red-300 text-center">
-            Could not reach server. Check your connection and try again.
+            <p>Could not reach server. Check your connection and try again.</p>
+            <p className="mt-1 text-red-400/70">
+              Ad blockers may block this site's host domain — try disabling yours for this page.
+              This will be resolved once the game moves to a custom domain instead of onRender.
+            </p>
           </div>
         )}
 
