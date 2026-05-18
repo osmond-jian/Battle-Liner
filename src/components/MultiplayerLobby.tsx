@@ -20,11 +20,9 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
   const [serverStatus, setServerStatus] = useState<ServerStatus>('checking');
 
   // Host view
-  const [opponentNameInput, setOpponentNameInput] = useState('');
-  const [hostError, setHostError] = useState('');
-  // Generate room code once when entering host view; reset on leaving.
   const roomCodeRef = useRef<string>('');
   const [roomCodeDisplay, setRoomCodeDisplay] = useState('');
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (view === 'host') {
       const code = generateRoomCode();
@@ -33,6 +31,7 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
     } else {
       roomCodeRef.current = '';
       setRoomCodeDisplay('');
+      setCopied(false);
     }
   }, [view]);
 
@@ -41,8 +40,6 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
   const [joinError, setJoinError] = useState('');
 
   // ── Server warm-up ping ──────────────────────────────────────────────────
-  // Fires immediately on mount so the server starts waking up before the user
-  // clicks Host/Join. After 3 s with no response we show a warming banner.
   useEffect(() => {
     const warmingTimer = setTimeout(() => setServerStatus('warming'), 3000);
     fetch(`${SERVER_URL}/health`)
@@ -64,23 +61,14 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
 
   // ── Host game ────────────────────────────────────────────────────────────
   const handleHost = () => {
-    const opp = opponentNameInput.trim();
-    if (opp && opp === profile.username) {
-      setHostError('Opponent name must differ from yours.');
-      return;
-    }
-    setHostError('');
     const code = roomCodeRef.current || generateRoomCode();
-    const opponentName = opp || 'Guest';
-
     onStartGame({
       localPlayer: profile,
-      opponentName,
+      opponentName: 'Opponent',
       isHost: true,
       transport: 'realtime',
       hostName: profile.username,
-      guestName: opponentName,
-      // Host starts as 'player'; INIT_STATE sent on connection randomises who goes first.
+      guestName: 'Opponent',
       currentTurnName: profile.username,
       roomCode: code,
     });
@@ -101,11 +89,19 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
       transport: 'realtime',
       hostName: 'Host',
       guestName: profile.username,
-      // Guest starts as 'opponent' (waiting) until INIT_STATE arrives.
       currentTurnName: 'Host',
       roomCode: code,
     });
   };
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(roomCodeDisplay).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const serverReady = serverStatus === 'ready';
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -114,15 +110,13 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
 
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-black tracking-widest text-amber-400 uppercase mb-1">
-            Battle Line
+          <h1 className="text-2xl font-black tracking-widest text-amber-400 uppercase mb-1">
+            Multiplayer
           </h1>
-          <p className="text-slate-500 text-sm uppercase tracking-widest">Multiplayer</p>
         </div>
 
         {/* Profile card */}
-        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 mb-6">
-          <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Your Profile</p>
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 mb-4">
           {editingUsername ? (
             <div className="flex gap-2">
               <input
@@ -148,7 +142,10 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
             </div>
           ) : (
             <div className="flex items-center justify-between">
-              <span className="font-bold text-white">{profile.username}</span>
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-widest mb-0.5">Playing as</p>
+                <span className="font-bold text-white">{profile.username}</span>
+              </div>
               <button
                 onClick={() => setEditingUsername(true)}
                 className="text-xs text-slate-400 hover:text-slate-200 transition"
@@ -160,6 +157,12 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
         </div>
 
         {/* Server status banner */}
+        {serverStatus === 'checking' && (
+          <div className="flex items-center gap-2 px-4 py-3 mb-4 text-xs text-slate-500">
+            <span className="inline-block w-2 h-2 rounded-full bg-slate-600 animate-pulse" />
+            Connecting to server…
+          </div>
+        )}
         {serverStatus === 'warming' && (
           <div className="bg-amber-900/30 border border-amber-700/50 rounded-xl px-4 py-3 mb-4 text-xs text-amber-300 text-center">
             Server is starting up — this may take ~1 minute on first use.
@@ -198,41 +201,36 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
         {/* Host view */}
         {view === 'host' && (
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300 mb-4">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300 mb-5">
               Host a Game
             </h2>
 
-            <label className="block text-xs text-slate-500 uppercase tracking-widest mb-1">
-              Opponent's name <span className="text-slate-600 normal-case">(optional)</span>
-            </label>
-            <input
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white mb-1 focus:outline-none focus:border-amber-500"
-              placeholder="e.g. SwiftBlade42"
-              value={opponentNameInput}
-              onChange={e => setOpponentNameInput(e.target.value)}
-              maxLength={20}
-            />
-            {hostError && <p className="text-red-400 text-xs mb-2">{hostError}</p>}
-
-            <p className="text-xs text-slate-500 uppercase tracking-widest mt-5 mb-1">
-              Room code
-            </p>
-            <p className="font-mono text-3xl text-amber-400 tracking-[0.3em] font-black mb-1 select-all">
-              {roomCodeDisplay}
-            </p>
+            <p className="text-xs text-slate-500 uppercase tracking-widest mb-2">Room code</p>
+            <div className="flex items-center gap-3 mb-2">
+              <p className="font-mono text-3xl text-amber-400 tracking-[0.3em] font-black select-all">
+                {roomCodeDisplay}
+              </p>
+              <button
+                onClick={handleCopyCode}
+                className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition"
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
             <p className="text-xs text-slate-600 mb-6">
-              Share this 6-letter code with your opponent.
+              Share this code with your opponent, then start the game.
             </p>
 
             <div className="flex gap-3">
               <button
                 onClick={handleHost}
-                className="flex-1 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-bold text-sm uppercase tracking-wide transition"
+                disabled={!serverReady}
+                className="flex-1 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-bold text-sm uppercase tracking-wide transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-amber-600"
               >
                 Start Game
               </button>
               <button
-                onClick={() => { setView('main'); setHostError(''); setOpponentNameInput(''); }}
+                onClick={() => setView('main')}
                 className="flex-1 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition"
               >
                 Back
@@ -244,27 +242,28 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
         {/* Join view */}
         {view === 'join' && (
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6">
-            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300 mb-4">
+            <h2 className="text-sm font-bold uppercase tracking-widest text-slate-300 mb-5">
               Join a Game
             </h2>
 
-            <label className="block text-xs text-slate-500 uppercase tracking-widest mb-1">
+            <label className="block text-xs text-slate-500 uppercase tracking-widest mb-2">
               Room code
             </label>
             <input
-              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-xl text-white font-mono tracking-[0.3em] uppercase text-center focus:outline-none focus:border-amber-500"
+              className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2.5 text-xl text-white font-mono tracking-[0.3em] uppercase text-center focus:outline-none focus:border-amber-500 mb-1"
               placeholder="ABC123"
               value={joinCodeInput}
               onChange={e => setJoinCodeInput(e.target.value.toUpperCase().slice(0, 6))}
               maxLength={6}
               autoFocus
             />
-            {joinError && <p className="text-red-400 text-xs mt-1 mb-1">{joinError}</p>}
+            {joinError && <p className="text-red-400 text-xs mt-1">{joinError}</p>}
 
             <div className="flex gap-3 mt-5">
               <button
                 onClick={handleJoin}
-                className="flex-1 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-bold text-sm uppercase tracking-wide transition"
+                disabled={!serverReady}
+                className="flex-1 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-black font-bold text-sm uppercase tracking-wide transition disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-amber-600"
               >
                 Connect
               </button>
