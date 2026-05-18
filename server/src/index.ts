@@ -3,6 +3,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { RoomManager } from './rooms';
+import path from 'path';
 
 // ── Logger ───────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,15 @@ const io = new Server(httpServer, {
 app.get('/health', (_req, res) => {
   res.json({ ok: true, rooms: rooms.count() });
 });
+
+// Serve built frontend in production
+if (process.env.NODE_ENV === 'production') {
+  const clientDist = path.join(__dirname, '../../dist');
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
