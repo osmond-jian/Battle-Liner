@@ -1,10 +1,12 @@
 {
-  "name": "vite-react-typescript-starter",
+  "name": "battle-line",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "npm --prefix server run dev",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -14,9 +16,9 @@
   "dependencies": {
     "framer-motion": "^12.9.4",
     "lucide-react": "^0.344.0",
-    "peerjs": "^1.5.5",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
@@ -36,6 +38,7 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^6.2.2",
+    "concurrently": "^8.2.2",
     "vitest": "^4.1.2"
   }
 }

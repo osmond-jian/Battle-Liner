@@ -12,6 +12,8 @@ import { GameBoard } from './GameBoard';
 import { saveGame, type LoadedSave } from '../utils/saveGame';
 import type { MultiplayerConfig } from '../types/multiplayer';
 import type { TurnPhase } from '../types/game';
+import type { RematchPending } from './VictoryModal';
+import { saveMpSession, clearMpSession } from '../utils/mpSession';
 
 interface GameManagerProps {
   onExit: () => void;
@@ -57,13 +59,36 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
   // ── P2P connection ───────────────────────────────────────────────────────
   // usePeer is always called (hooks can't be conditional).
   // When roomCode is '__noop__' the hook exits early and returns idle status.
-  const { status: peerStatus, hadGuest, retryCount: peerRetryCount, lastError: peerLastError, sendState, sendInitState, sendResync } = usePeer({
+  // ── Rematch state ────────────────────────────────────────────────────────
+  const [rematchPending, setRematchPending] = useState<RematchPending>('none');
+  // Signals that the host should send a new INIT_STATE after state reset settles.
+  const [pendingRematch, setPendingRematch] = useState(false);
+
+  const { status: peerStatus, hadGuest, retryCount: peerRetryCount, lastError: peerLastError,
+    sendState, sendInitState, sendResync, sendConcede, sendRematchRequest, sendRematchAccept } = usePeer({
     isHost,
     roomCode: multiplayerConfig?.roomCode ?? '__noop__',
+    playerId: multiplayerConfig?.localPlayer.id ?? '',
+    playerName: multiplayerConfig?.localPlayer.username ?? '',
     onMessage: (msg) => onMessageRef.current(msg),
     onGuestReconnect: isRealtimeMP && isHost
       ? () => handleGuestReconnectRef.current()
       : undefined,
+    getGameState: isRealtimeMP && isHost
+      ? () => gameStateRef.current
+      : undefined,
+    onConcede: () => {
+      dispatch({ type: 'SET_GAME_STATUS', status: 'playerWon' });
+    },
+    onRematchRequest: () => {
+      setRematchPending(p => p === 'none' ? 'received' : p);
+    },
+    onRematchAccept: () => {
+      // The OTHER player accepted our proposal — execute the rematch.
+      dispatch({ type: 'RESET_GAME' });
+      setRematchPending('none');
+      if (isHost) setPendingRematch(true);
+    },
   });
 
   // ── Pending-send pattern ─────────────────────────────────────────────────
@@ -160,28 +185,85 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
   }, [peerStatus, isRealtimeMP, isHost, sendInitState]);
 
   // ── Game-over broadcast ──────────────────────────────────────────────────
-  // The normal pendingSend path (triggered by handleDeckDraw) is skipped when
-  // the game ends because showDrawModal is gated on gameStatus === 'playing'.
-  // This effect closes that gap: whenever THIS player wins, schedule a send so
-  // the opponent receives the final state and sees the defeat screen.
+  // Broadcast when this player wins (or draw) so opponent sees the final state.
   useEffect(() => {
     if (!isRealtimeMP) return;
-    if (gameState.gameStatus !== 'playerWon') return;
+    if (gameState.gameStatus !== 'playerWon' && gameState.gameStatus !== 'draw') return;
     setPendingSend(true);
-  // gameState.gameStatus changing is the only trigger we need here.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.gameStatus, isRealtimeMP]);
+
+  // ── Concede ──────────────────────────────────────────────────────────────
+  const handleConcede = useCallback(() => {
+    dispatch({ type: 'SET_GAME_STATUS', status: 'opponentWon' });
+    if (isRealtimeMP) {
+      sendConcede();
+      clearMpSession();
+    }
+  }, [dispatch, isRealtimeMP, sendConcede]);
+
+  // ── Rematch ──────────────────────────────────────────────────────────────
+  // After RESET_GAME settles, host sends a new INIT_STATE to start the round.
+  useEffect(() => {
+    if (!pendingRematch || !isHost) return;
+    setPendingRematch(false);
+    const guestFirst = Math.random() < 0.5;
+    sendInitState(gameStateRef.current, guestFirst);
+    if (guestFirst) advanceToOpponentTurnRef.current();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRematch, gameState, isHost, sendInitState]);
+
+  const handleProposeRematch = useCallback(() => {
+    sendRematchRequest();
+    setRematchPending('sent');
+  }, [sendRematchRequest]);
+
+  const handleAcceptRematch = useCallback(() => {
+    sendRematchAccept();
+    // We accepted — execute locally too.
+    dispatch({ type: 'RESET_GAME' });
+    setRematchPending('none');
+    if (isHost) setPendingRematch(true);
+  }, [dispatch, isHost, sendRematchAccept]);
+
+  // ── Multiplayer session persistence ──────────────────────────────────────
+  // Saves enough information for the host to restore state after a browser close.
+  // Cleared when the game ends or the player exits to the menu.
+  useEffect(() => {
+    if (!isRealtimeMP || !multiplayerConfig?.roomCode) return;
+    if (gameState.gameStatus !== 'playing') {
+      clearMpSession();
+      return;
+    }
+    saveMpSession({
+      roomCode: multiplayerConfig.roomCode,
+      isHost,
+      playerId: multiplayerConfig.localPlayer.id,
+      playerName: multiplayerConfig.localPlayer.username,
+      opponentName: multiplayerConfig.opponentName,
+      savedAt: Date.now(),
+      // Only host stores game state — guest relies on host resync.
+      gameState: isHost ? gameState : undefined,
+      turnPhase:  isHost ? turn.currentTurn : undefined,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState, isRealtimeMP, isHost, multiplayerConfig]);
 
   // ── Save ─────────────────────────────────────────────────────────────────
   const handleSave = useCallback(() => {
     saveGame(gameState, turn.currentTurn);
   }, [gameState, turn.currentTurn]);
 
+  const handleExit = useCallback(() => {
+    if (isRealtimeMP) clearMpSession();
+    onExit();
+  }, [isRealtimeMP, onExit]);
+
   return (
     <GameContext.Provider value={{
       gameState,
       dispatch,
-      onExit,
+      onExit: handleExit,
       currentTurn:               turn.currentTurn,
       turnMessage:               turn.turnMessage,
       toastMessage:              turn.toastMessage,
@@ -201,6 +283,10 @@ export function GameManager({ onExit, initialState, multiplayerConfig, initialTu
       handleSwapCards:           turn.handleSwapCards,
       handleSortHand:            turn.handleSortHand,
       handleSave,
+      handleConcede,
+      rematchPending,
+      handleProposeRematch,
+      handleAcceptRematch,
       flyingCard:      animations.flyingCard,
       flyFrom:         animations.flyFrom,
       flyTo:           animations.flyTo,

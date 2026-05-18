@@ -74,6 +74,10 @@ export function GameBoard() {
     handleSwapCards,
     handleSortHand,
     handleSave,
+    handleConcede,
+    rematchPending,
+    handleProposeRematch,
+    handleAcceptRematch,
     toastMessage,
     flyingCard,
     flyFrom,
@@ -105,6 +109,7 @@ export function GameBoard() {
   const isRealtimeMP  = multiplayerConfig?.transport === 'realtime';
   const isHost        = !!multiplayerConfig?.isHost;
   const [showConnDetails, setShowConnDetails] = useState(false);
+  const [showConcedeConfirm, setShowConcedeConfirm] = useState(false);
   const playerName    = multiplayerConfig?.localPlayer.username ?? 'You';
   const opponentName  = multiplayerConfig?.opponentName ?? 'CPU Bot';
 
@@ -177,6 +182,33 @@ export function GameBoard() {
             >
               New Game
             </button>
+          )}
+          {/* ── Concede (multiplayer only, active game only) ── */}
+          {isRealtimeMP && gameState.gameStatus === 'playing' && (
+            showConcedeConfirm ? (
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-red-400 font-semibold hidden sm:inline">Concede?</span>
+                <button
+                  onClick={() => { handleConcede(); setShowConcedeConfirm(false); }}
+                  className="text-xs px-2 py-1 rounded-lg bg-red-700 hover:bg-red-600 text-white font-bold transition"
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={() => setShowConcedeConfirm(false)}
+                  className="text-xs px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition"
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowConcedeConfirm(true)}
+                className="text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-slate-800 hover:bg-red-900/60 text-slate-400 hover:text-red-300 border border-slate-700 hover:border-red-800 transition"
+              >
+                Concede
+              </button>
+            )
           )}
           <button
             onClick={onExit}
@@ -532,6 +564,10 @@ export function GameBoard() {
           result={gameState.gameStatus}
           onPlayAgain={handleNewGame}
           onDismiss={() => setVictoryDismissed(true)}
+          isMultiplayer={isRealtimeMP}
+          rematchPending={rematchPending}
+          onProposeRematch={handleProposeRematch}
+          onAcceptRematch={handleAcceptRematch}
         />
       )}
 
@@ -542,25 +578,33 @@ export function GameBoard() {
           border-t shadow-lg
           ${gameState.gameStatus === 'playerWon'
             ? 'bg-yellow-900/95 border-yellow-600 text-yellow-200'
+            : gameState.gameStatus === 'draw'
+            ? 'bg-slate-800/95 border-slate-600 text-slate-200'
             : 'bg-red-950/95 border-red-700 text-red-200'}
         `}>
           <span className="font-bold text-sm">
             {gameState.gameStatus === 'playerWon'
               ? '🏆 Victory — Your forces claimed the battle line!'
+              : gameState.gameStatus === 'draw'
+              ? '🤝 Draw — The battle line holds. Neither side broke through.'
               : '💀 Defeated — The enemy broke through your defenses.'}
           </span>
           <div className="flex gap-2 shrink-0">
-            <button
-              onClick={handleNewGame}
-              className={`
-                text-xs px-4 py-1.5 rounded-lg font-bold transition
-                ${gameState.gameStatus === 'playerWon'
-                  ? 'bg-yellow-400 hover:bg-yellow-300 text-black'
-                  : 'bg-red-600 hover:bg-red-500 text-white'}
-              `}
-            >
-              New Game
-            </button>
+            {!isRealtimeMP && (
+              <button
+                onClick={handleNewGame}
+                className={`
+                  text-xs px-4 py-1.5 rounded-lg font-bold transition
+                  ${gameState.gameStatus === 'playerWon'
+                    ? 'bg-yellow-400 hover:bg-yellow-300 text-black'
+                    : gameState.gameStatus === 'draw'
+                    ? 'bg-slate-500 hover:bg-slate-400 text-white'
+                    : 'bg-red-600 hover:bg-red-500 text-white'}
+                `}
+              >
+                New Game
+              </button>
+            )}
             <button
               onClick={onExit}
               className="text-xs px-4 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 border border-slate-600 transition"
@@ -599,7 +643,9 @@ export function GameBoard() {
             {peerStatus === 'connecting' && (
               <div>
                 <p className="text-slate-300 text-sm font-semibold">Connecting to game…</p>
-                <p className="text-xs text-slate-500 mt-1">Establishing WebRTC connection.</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Server may be starting up — first connect can take ~1 minute.
+                </p>
               </div>
             )}
 
@@ -615,12 +661,12 @@ export function GameBoard() {
             {peerStatus === 'disconnected' && (
               <div>
                 <p className="text-red-400 text-sm font-semibold">
-                  {isHost ? 'Opponent could not reconnect.' : `Could not connect after ${MAX_RETRIES} attempts.`}
+                  {isHost ? 'Opponent could not reconnect.' : `Could not reconnect after ${MAX_RETRIES} attempts.`}
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
                   {isHost
                     ? 'The guest may have closed the game.'
-                    : 'This is usually a NAT or firewall issue. Try a different network, or disable a VPN if active.'}
+                    : 'The server may be down or the room expired. Ask the host to start a new game.'}
                 </p>
               </div>
             )}

@@ -14,7 +14,7 @@ export type GameAction =
   | { type: 'SCOUT_DISCARD_ORDER'; discards: [Card, Card] }
   | { type: 'SCOUT_SKIP_DRAWS' }
   | { type: 'APPLY_TACTIC'; card: Card; flagIndex: number; player?: 'player' | 'opponent' }
-  | { type: 'SET_GAME_STATUS'; status: 'playing' | 'playerWon' | 'opponentWon' }
+  | { type: 'SET_GAME_STATUS'; status: 'playing' | 'playerWon' | 'opponentWon' | 'draw' }
   | { type: 'CLEAR_PENDING_TACTIC' }
   | { type: 'SET_PENDING_TACTIC'; card: Card; flagIndex: number }
   | { type: 'CANCEL_REDEPLOY' }

@@ -40,7 +40,7 @@ export interface LastOpponentMove {
 }
 
 export interface GameState {
-  gameStatus: 'playing' | 'playerWon' | 'opponentWon';
+  gameStatus: 'playing' | 'playerWon' | 'opponentWon' | 'draw';
   playerHand: Card[];
   opponentHand: Card[];
   deck: Card[];

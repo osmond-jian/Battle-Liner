@@ -8,6 +8,8 @@ interface LandingPageProps {
   onContinue?: () => void;
   hasSave?: boolean;
   saveDate?: Date | null;
+  onRejoin?: () => void;
+  rejoinRoomCode?: string;
 }
 
 const highlights = [
@@ -33,7 +35,7 @@ const highlights = [
   },
 ];
 
-export function LandingPage({ onStart, onMultiplayer, onContinue, hasSave, saveDate }: LandingPageProps) {
+export function LandingPage({ onStart, onMultiplayer, onContinue, hasSave, saveDate, onRejoin, rejoinRoomCode }: LandingPageProps) {
   const [showGuide, setShowGuide] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [rulesTab, setRulesTab] = useState<'rules' | 'tactics'>('rules');
@@ -70,6 +72,21 @@ export function LandingPage({ onStart, onMultiplayer, onContinue, hasSave, saveD
               {saveDate && (
                 <span className="text-xs text-slate-500">
                   {saveDate.toLocaleDateString()} {saveDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+          )}
+          {onRejoin && (
+            <div className="flex flex-col items-center gap-1">
+              <button
+                onClick={onRejoin}
+                className="px-10 py-4 rounded-xl bg-blue-800 hover:bg-blue-700 text-white font-black text-lg uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all hover:scale-105 active:scale-100"
+              >
+                Rejoin Game
+              </button>
+              {rejoinRoomCode && (
+                <span className="text-xs text-slate-500 font-mono tracking-widest">
+                  Room: {rejoinRoomCode}
                 </span>
               )}
             </div>
