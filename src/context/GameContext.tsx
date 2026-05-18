@@ -3,6 +3,7 @@ import type { Dispatch } from 'react';
 import type { Card as CardType, GameState, TurnPhase } from '../types/game';
 import type { GameAction } from '../engine/gameEngine';
 import type { MultiplayerConfig, PeerStatus } from '../types/multiplayer';
+import type { RematchPending } from '../components/VictoryModal';
 
 interface GameContextValue {
   // Core state & dispatch
@@ -31,6 +32,10 @@ interface GameContextValue {
   handleSwapCards: (fromId: string, toId: string) => void;
   handleSortHand: (mode: 'value' | 'color') => void;
   handleSave: () => void;
+  handleConcede: () => void;
+  rematchPending: RematchPending;
+  handleProposeRematch: () => void;
+  handleAcceptRematch: () => void;
 
   // Animation state (read by GameBoard to render CardFly)
   flyingCard: CardType | null;

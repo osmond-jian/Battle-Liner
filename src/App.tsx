@@ -3,6 +3,7 @@ import { GameManager } from './components/GameManager';
 import { LandingPage } from './components/LandingPage';
 import { MultiplayerLobby } from './components/MultiplayerLobby';
 import { hasSave, loadGame, getSaveDate, type LoadedSave } from './utils/saveGame';
+import { loadMpSession } from './utils/mpSession';
 import type { MultiplayerConfig } from './types/multiplayer';
 import type { TurnPhase } from './types/game';
 
@@ -18,6 +19,7 @@ function App() {
   const [multiplayerConfig, setMultiplayerConfig] = useState<MultiplayerConfig | undefined>(undefined);
   const [soloFirstTurn, setSoloFirstTurn] = useState<TurnPhase | undefined>(undefined);
   const [saveExists, setSaveExists] = useState(() => hasSave());
+  const [mpSession] = useState(() => loadMpSession());
 
   const handleStartSolo = () => {
     setLoadedSave(null);
@@ -39,6 +41,28 @@ function App() {
   const handleExit = () => {
     setScreen('landing');
     setSaveExists(hasSave());
+  };
+
+  const handleRejoin = () => {
+    if (!mpSession) return;
+    const config: MultiplayerConfig = {
+      localPlayer: { id: mpSession.playerId, username: mpSession.playerName },
+      opponentName: mpSession.opponentName,
+      isHost: mpSession.isHost,
+      transport: 'realtime',
+      hostName:  mpSession.isHost ? mpSession.playerName : mpSession.opponentName,
+      guestName: mpSession.isHost ? mpSession.opponentName : mpSession.playerName,
+      currentTurnName: mpSession.playerName,
+      roomCode: mpSession.roomCode,
+    };
+    setMultiplayerConfig(config);
+    setLoadedSave(
+      mpSession.isHost && mpSession.gameState
+        ? { gameState: mpSession.gameState, turnPhase: mpSession.turnPhase ?? 'player', savedAt: new Date(mpSession.savedAt) }
+        : null
+    );
+    setSoloFirstTurn(undefined);
+    setScreen('game');
   };
 
   const handleStartMultiplayer = (config: MultiplayerConfig) => {
@@ -78,6 +102,8 @@ function App() {
       onContinue={handleContinue}
       hasSave={saveExists}
       saveDate={getSaveDate()}
+      onRejoin={mpSession ? handleRejoin : undefined}
+      rejoinRoomCode={mpSession?.roomCode}
     />
   );
 }

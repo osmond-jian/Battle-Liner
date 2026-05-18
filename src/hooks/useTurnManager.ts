@@ -1,12 +1,31 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Dispatch } from 'react';
-import type { Card as CardType, CardColor, CardValue, GameState, TurnPhase } from '../types/game';
+import type { Card as CardType, CardColor, CardValue, Flag, GameState, TurnPhase } from '../types/game';
 import type { GameAction } from '../engine/gameEngine';
 import type { Move } from '../types/Move';
 import { useOpponentAI } from './useOpponentAI';
 import { getSlotCount } from '../utils/gameLogic';
 import type { ActionToAnimate } from './useAnimateAction';
 import { DEBUG_DISABLE_TACTICS_LIMIT } from '../constants';
+
+function canMakeMove(hand: CardType[], flags: Flag[], side: 'player' | 'opponent'): boolean {
+  if (hand.length === 0) return false;
+  const hasSlotCard = hand.some(c =>
+    c.type === 'troop' ||
+    c.name === 'Leader' ||
+    c.name === 'Companion Cavalry' ||
+    c.name === 'Shield Bearers'
+  );
+  const hasNonSlotTactic = hand.some(c =>
+    c.type === 'tactic' &&
+    c.name !== 'Leader' &&
+    c.name !== 'Companion Cavalry' &&
+    c.name !== 'Shield Bearers'
+  );
+  const availableSlot = flags.some(f => !f.winner && f.formation[side].cards.length < getSlotCount(f));
+  const anyUnwonFlag  = flags.some(f => !f.winner);
+  return (hasSlotCard && availableSlot) || (hasNonSlotTactic && anyUnwonFlag);
+}
 
 interface UseTurnManagerParams {
   gameState: GameState;
@@ -40,6 +59,9 @@ export function useTurnManager({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Triggered when both players have no legal moves — resolved after state settles.
+  const [pendingDraw, setPendingDraw] = useState(false);
+
   const showToast = useCallback((msg: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(msg);
@@ -48,6 +70,41 @@ export function useTurnManager({
 
   // Cleanup timer on unmount.
   useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
+
+  // Resolve game end when both players have no legal moves (runs after state settles).
+  useEffect(() => {
+    if (!pendingDraw) return;
+    setPendingDraw(false);
+    if (gameState.gameStatus !== 'playing') return;
+    const playerFlags   = gameState.flags.filter(f => f.winner === 'player').length;
+    const opponentFlags = gameState.flags.filter(f => f.winner === 'opponent').length;
+    if      (playerFlags > opponentFlags)   dispatch({ type: 'SET_GAME_STATUS', status: 'playerWon' });
+    else if (opponentFlags > playerFlags)   dispatch({ type: 'SET_GAME_STATUS', status: 'opponentWon' });
+    else                                    dispatch({ type: 'SET_GAME_STATUS', status: 'draw' });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDraw, gameState]);
+
+  // Auto-pass when the player has no legal moves and both decks are exhausted (solo only).
+  const handledNoMovesRef = useRef(false);
+  useEffect(() => {
+    if (currentTurn !== 'player') { handledNoMovesRef.current = false; return; }
+    if (gameState.gameStatus !== 'playing') return;
+    if (gameState.deck.length > 0 || gameState.tacticsDeck.length > 0) return;
+    if (onAsyncTurnEndRef.current) return; // handled differently in multiplayer
+    if (canMakeMove(gameState.playerHand, gameState.flags, 'player')) return;
+    if (handledNoMovesRef.current) return;
+    handledNoMovesRef.current = true;
+    showToast('You have no legal moves — passing turn.');
+    const gs = gameStateRef.current;
+    const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
+    if (oppMove) {
+      setCurrentTurn('opponent');
+      runTurnRef.current({ ...oppMove, player: 'opponent' });
+    } else {
+      setPendingDraw(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTurn, gameState]);
 
   // Always-fresh ref to gameState so async callbacks never read stale closures.
   const gameStateRef = useRef(gameState);
@@ -157,8 +214,14 @@ export function useTurnManager({
             onAsyncTurnEndRef.current();
           } else {
             const oppMove = getMove(gs.opponentHand, gs.flags, gs.deck, gs.opponentTacticsPlayed, gs.playerTacticsPlayed);
-            if (oppMove) runTurnRef.current({ ...oppMove, player: 'opponent' });
-            else setCurrentTurn('player');
+            if (oppMove) {
+              runTurnRef.current({ ...oppMove, player: 'opponent' });
+            } else if (canMakeMove(gs.playerHand, gs.flags, 'player')) {
+              showToast('Opponent has no moves — your turn again.');
+              setCurrentTurn('player');
+            } else {
+              setPendingDraw(true);
+            }
           }
         } else {
           setCurrentTurn('awaitingDraw');

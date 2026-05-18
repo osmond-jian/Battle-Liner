@@ -1,0 +1,24 @@
+services:
+  # ── WebSocket relay server ───────────────────────────────────────────────
+  - type: web
+    name: battle-line-server
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        value: https://battle-line-client.onrender.com
+
+  # ── Static frontend ──────────────────────────────────────────────────────
+  - type: web
+    name: battle-line-client
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_SERVER_URL
+        value: https://battle-line-server.onrender.com

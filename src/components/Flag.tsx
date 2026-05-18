@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Flag as FlagType } from '../types/game';
 import { Card } from './Card';
 import type { Card as CardType } from '../types/game';
@@ -15,12 +16,8 @@ interface FlagProps {
   onTraitorSelect?: (card: CardType, fromFlagIndex: number) => void;
   pendingTraitor?: { card: CardType; fromFlag: number } | null;
   onTraitorDestination?: (toFlagIndex: number) => void;
-  /** Board-wide max slots (4 when any flag has mud). Used to keep all flag
-   *  columns the same height so the flag poles line up vertically. */
   displaySlots?: number;
-  /** Card ID of the opponent's last-placed card — rendered with a red highlight ring. */
   lastOpponentHighlightCardId?: string;
-  /** Card ID of the player's last-placed card — rendered with a green highlight ring. */
   lastPlayerHighlightCardId?: string;
 }
 
@@ -56,9 +53,27 @@ export function Flag({
   const wonByPlayer   = flag.winner === 'player';
   const wonByOpponent = flag.winner === 'opponent';
   const slots = getSlotCount(flag);
-  // Total rows to render per side — at least `slots`, but padded to `displaySlots`
-  // so all flag columns have the same height and flag poles stay aligned.
   const totalRows = Math.max(slots, displaySlots ?? 0);
+
+  // ── Capture animation ──────────────────────────────────────────────────────
+  const prevWinnerRef = useRef(flag.winner);
+  const [justCaptured, setJustCaptured] = useState<'player' | 'opponent' | null>(null);
+
+  useEffect(() => {
+    if (flag.winner && !prevWinnerRef.current) {
+      setJustCaptured(flag.winner);
+      const t = setTimeout(() => setJustCaptured(null), 900);
+      return () => clearTimeout(t);
+    }
+    prevWinnerRef.current = flag.winner;
+  }, [flag.winner]);
+
+  const captureGlow =
+    justCaptured === 'player'
+      ? 'shadow-[0_0_20px_6px_rgba(52,211,153,0.6)]'
+      : justCaptured === 'opponent'
+      ? 'shadow-[0_0_20px_6px_rgba(239,68,68,0.6)]'
+      : '';
 
   return (
     <div
@@ -71,18 +86,13 @@ export function Flag({
         ${selected        ? 'ring-2 ring-blue-400 bg-blue-900/30 shadow-lg shadow-blue-500/20' : ''}
         ${isTraitorTarget ? 'ring-2 ring-yellow-400 bg-yellow-400/10 shadow-lg shadow-yellow-400/20' : ''}
         ${!selected && !isTraitorTarget ? 'hover:bg-white/5' : ''}
+        ${captureGlow}
       `}
     >
-      {/* ── Opponent cards (top, rendered bottom-to-top so first card is at top) */}
-      <div
-        id={`flag-${flagIndex}-opponent`}
-        className="flex flex-col items-center gap-0.5 w-full"
-      >
+      {/* ── Opponent cards */}
+      <div id={`flag-${flagIndex}-opponent`} className="flex flex-col items-center gap-0.5 w-full">
         {Array.from({ length: totalRows }).map((_, i) => {
-          // Extra rows beyond this flag's slot count are invisible height-spacers.
-          if (i >= slots) {
-            return <div key={i} className="w-full h-7 invisible" />;
-          }
+          if (i >= slots) return <div key={i} className="w-full h-7 invisible" />;
           const card = flag.formation.opponent.cards[i];
           return card ? (
             <Card
@@ -107,26 +117,58 @@ export function Flag({
         })}
       </div>
 
-      {/* ── Flag pole & banner */}
+      {/* ── Flag pole & banner ─────────────────────────────────────────────── */}
       <div className="flex flex-col items-center my-0.5">
         {/* Banner */}
-        <div className={`
-          w-10 rounded-t-sm py-0.5 flex items-center justify-center
-          text-[11px] font-bold shadow-sm
-          ${wonByPlayer   ? 'bg-emerald-500 text-white' :
-            wonByOpponent ? 'bg-red-600 text-white'      :
-                            'bg-slate-600 text-slate-200'}
-        `}>
+        <motion.div
+          animate={
+            justCaptured
+              ? { scale: [1, 1.35, 1.1, 1], filter: ['brightness(1)', 'brightness(2.2)', 'brightness(1.3)', 'brightness(1)'] }
+              : { scale: 1, filter: 'brightness(1)' }
+          }
+          transition={{ duration: 0.65, ease: 'easeOut' }}
+          className={`
+            w-10 rounded-t-sm py-0.5 flex items-center justify-center
+            text-[11px] font-bold shadow-sm
+            ${wonByPlayer   ? 'bg-emerald-500 text-white' :
+              wonByOpponent ? 'bg-red-600 text-white'      :
+                              'bg-slate-600 text-slate-200'}
+          `}
+        >
           {wonByPlayer ? '✔' : wonByOpponent ? '✘' : flagIndex + 1}
-        </div>
+        </motion.div>
+
         {/* Pole */}
-        <div
+        <motion.div
+          animate={justCaptured ? { scaleY: [1, 1.05, 1] } : { scaleY: 1 }}
+          transition={{ duration: 0.4 }}
           className={`w-1.5 rounded-full ${wonByPlayer ? 'bg-emerald-400' : wonByOpponent ? 'bg-red-500' : 'bg-slate-500'}`}
-          style={{ height: '32px' }}
+          style={{ height: '32px', transformOrigin: 'top' }}
         />
+
         {/* Base */}
         <div className={`w-6 h-1.5 rounded-full ${wonByPlayer ? 'bg-emerald-600' : wonByOpponent ? 'bg-red-700' : 'bg-slate-600'}`} />
       </div>
+
+      {/* Capture badge */}
+      <AnimatePresence>
+        {justCaptured && (
+          <motion.div
+            key="capture-badge"
+            initial={{ opacity: 0, y: 4, scale: 0.8 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.9 }}
+            transition={{ duration: 0.25 }}
+            className={`
+              absolute text-[9px] font-black tracking-widest uppercase px-1.5 py-0.5 rounded-full shadow-lg pointer-events-none
+              ${justCaptured === 'player' ? 'bg-emerald-500 text-white' : 'bg-red-600 text-white'}
+            `}
+            style={{ marginTop: '-4px' }}
+          >
+            Captured!
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modifier tags */}
       {(flag.modifiers.includes('fog') || flag.modifiers.includes('mud')) && (
@@ -144,16 +186,10 @@ export function Flag({
         </div>
       )}
 
-      {/* ── Player cards (bottom) */}
-      <div
-        id={`flag-${flagIndex}-player`}
-        className="flex flex-col items-center gap-0.5 w-full"
-      >
+      {/* ── Player cards */}
+      <div id={`flag-${flagIndex}-player`} className="flex flex-col items-center gap-0.5 w-full">
         {Array.from({ length: totalRows }).map((_, i) => {
-          // Extra rows beyond this flag's slot count are invisible height-spacers.
-          if (i >= slots) {
-            return <div key={i} className="w-full h-7 invisible" />;
-          }
+          if (i >= slots) return <div key={i} className="w-full h-7 invisible" />;
           const card = flag.formation.player.cards[i];
           return card ? (
             <Card

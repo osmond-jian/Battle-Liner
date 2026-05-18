@@ -1,18 +1,13 @@
 /**
- * GameManager integration tests.
- *
- * Scope: verifies that GameManager correctly broadcasts game state over the
- * peer connection in realtime-multiplayer scenarios.
+ * GameManager integration tests — socket.io transport.
  *
  * Strategy:
- *   - Mock 'peerjs' with the same lightweight fake used in usePeer.test.ts.
- *   - Mock GameBoard with a stub that returns null (avoids rendering the full
- *     UI with its many dependencies while still exercising all of GameManager's
- *     hooks and effects).
- *   - Trigger a game-over condition by having the fake connection emit a
- *     GAME_STATE data event whose gameStatus indicates the host won (from the
- *     guest's perspective: 'opponentWon' → flipped to 'playerWon' on the host).
- *   - Assert on `conn.sent` to verify the correct P2P messages were sent.
+ * - Mock 'socket.io-client' with the same lightweight fake used in usePeer.test.ts.
+ * - Mock GameBoard with a stub that returns null (avoids rendering the full UI
+ *   while still exercising all of GameManager's hooks and effects).
+ * - Verify that GameManager correctly relays game state over the socket:
+ *     host win  → host broadcasts final state so the guest sees the defeat screen
+ *     guest win → host must NOT re-broadcast (the guest is responsible for that)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -21,178 +16,172 @@ import { GameManager } from '../components/GameManager';
 import type { MultiplayerConfig } from '../types/multiplayer';
 import { makeState } from './helpers';
 
-// ── vi.hoisted: shared mutable state ─────────────────────────────────────────
+// ── Shared mock state ─────────────────────────────────────────────────────────
 
-const peerState = vi.hoisted(() => ({
+const socketState = vi.hoisted(() => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  lastPeer: null as any,
+  lastSocket: null as any,
 }));
 
-// ── Fake PeerJS module ────────────────────────────────────────────────────────
+// ── Fake socket.io-client ─────────────────────────────────────────────────────
 
-vi.mock('peerjs', () => {
-  class FakePeer {
-    id: string;
-    destroyed = false;
+vi.mock('socket.io-client', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function makeSocket(): any {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private _h: Record<string, any[]> = {};
+    const handlers: Record<string, any[]> = {};
+    let _connected = false;
 
-    constructor(id?: string) {
-      this.id = id ?? 'auto-id';
-      peerState.lastPeer = this;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    on(event: string, cb: any) { (this._h[event] ??= []).push(cb); }
-    connect() {
-      return { open: false, on() {}, send() {}, close() {}, _emit() {} };
-    }
-    destroy() { this.destroyed = true; }
-    _emit(event: string, ...args: unknown[]) {
+    const socket = {
+      get connected() { return _connected; },
+      emitted: [] as { event: string; args: unknown[] }[],
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this._h[event]?.forEach((cb: any) => cb(...args));
-    }
+      acks: {} as Record<string, any[]>,
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      on(event: string, cb: any) { (handlers[event] ??= []).push(cb); },
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      emit(event: string, ...args: any[]) {
+        const last = args[args.length - 1];
+        if (typeof last === 'function') {
+          (socket.acks[event] ??= []).push(last);
+          socket.emitted.push({ event, args: args.slice(0, -1) });
+        } else {
+          socket.emitted.push({ event, args });
+        }
+      },
+
+      disconnect() {
+        _connected = false;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (handlers['disconnect'] ?? []).forEach((cb: any) => cb('io client disconnect'));
+      },
+
+      _connect() {
+        _connected = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (handlers['connect'] ?? []).forEach((cb: any) => cb());
+      },
+      _emit(event: string, ...args: unknown[]) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (handlers[event] ?? []).forEach((cb: any) => cb(...args));
+      },
+      _ack(event: string, response: unknown) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cbs: any[] = socket.acks[event] ?? [];
+        socket.acks[event] = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        cbs.forEach((cb: any) => cb(response));
+      },
+    };
+
+    socketState.lastSocket = socket;
+    return socket;
   }
 
-  return { Peer: FakePeer };
+  return { io: () => makeSocket() };
 });
 
 // ── Stub GameBoard ────────────────────────────────────────────────────────────
-// Returns null so the heavy UI tree (framer-motion, drag-and-drop, etc.) is
-// never mounted, but GameManager's own hooks and effects still run in full.
 
 vi.mock('../components/GameBoard', () => ({ GameBoard: () => null }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * A fake connection with a proper event-handler registry.
- * - Auto-fires 'open' when `on('open', cb)` is registered (simulates an
- *   already-open channel, matching the host's view of an accepted connection).
- * - `_emit(event, ...args)` lets tests inject 'data' events (simulate the
- *   guest sending a P2P message) or 'close' events.
- */
-function makeConn() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handlers: Record<string, any[]> = {};
-  return {
-    open: true,
-    sent: [] as unknown[],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    on(event: string, cb: any) {
-      (handlers[event] ??= []).push(cb);
-      if (event === 'open') cb(); // auto-open
-    },
-    send(msg: unknown) { this.sent.push(msg); },
-    close() { handlers['close']?.forEach((cb: () => void) => cb()); },
-    _emit(event: string, ...args: unknown[]) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      handlers[event]?.forEach((cb: any) => cb(...args));
-    },
-  };
-}
-
 const realtimeHostConfig: MultiplayerConfig = {
   transport: 'realtime',
   isHost: true,
   roomCode: 'TESTGM',
-  localPlayer: { username: 'Host' },
+  localPlayer: { id: 'host-uuid', username: 'Host' },
   opponentName: 'Guest',
+  hostName: 'Host',
+  guestName: 'Guest',
+  currentTurnName: 'Host',
 };
 
-/** Wait long enough for the dynamic PeerJS import + async useEffect to run. */
-async function waitForInit() {
+async function waitForEffects() {
   await act(async () => { await new Promise(r => setTimeout(r, 50)); });
 }
 
+/** Bring the socket to 'connected' status (connect → register ack → guest_joined). */
+async function establishConnection() {
+  const socket = socketState.lastSocket;
+  await act(async () => { socket._connect(); });
+  await act(async () => { socket._ack('register', { status: 'ok', role: 'host', guestPresent: false }); });
+  await act(async () => { socket._emit('guest_joined', { guestName: 'Guest' }); });
+  await waitForEffects(); // let INIT_STATE effect run
+}
+
 beforeEach(() => {
-  peerState.lastPeer = null;
+  socketState.lastSocket = null;
   vi.clearAllMocks();
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('GameManager — realtime multiplayer game-over broadcast', () => {
-  it('sends the winning game state to the guest when the host wins', async () => {
-    // Bug being tested: after the winning move the DrawModal is suppressed
-    // (gated on gameStatus === 'playing'), so handleDeckDraw / setPendingSend
-    // never fire via the normal path — the guest never received the defeat state.
-    //
-    // The fix adds a dedicated useEffect that sets pendingSend whenever
-    // gameStatus transitions to 'playerWon'.
+  it('broadcasts the winning state to the guest when the host wins', async () => {
+    // Regression: after the winning move the DrawModal is suppressed (gated on
+    // gameStatus === 'playing'), so handleDeckDraw / setPendingSend never fired
+    // via the normal path — the guest never received the defeat state.
+    // Fix: a dedicated useEffect sets pendingSend whenever gameStatus → 'playerWon'.
 
-    const conn = makeConn();
     const { unmount } = render(
       <GameManager onExit={() => {}} multiplayerConfig={realtimeHostConfig} />,
     );
-    await waitForInit();
+    await waitForEffects();
+    await establishConnection();
 
-    // Open peer (host enters 'waiting').
-    await act(async () => { peerState.lastPeer._emit('open'); });
-    // Guest connects — host auto-sends INIT_STATE.
-    await act(async () => { peerState.lastPeer._emit('connection', conn); });
-    await waitForInit();
+    // Clear the socket log so we only inspect post-win messages.
+    socketState.lastSocket.emitted = [];
 
-    // Reset sent log so we only assert on the game-over broadcast.
-    conn.sent = [];
-
-    // Simulate the guest sending a GAME_STATE where, from the guest's
-    // perspective, the opponent (host) won → gameStatus: 'opponentWon'.
-    // GameManager.onMessage flips perspective, giving the host gameStatus: 'playerWon'.
+    // Guest sends GAME_STATE saying the opponent (host) won.
+    // flipGameStatePerspective converts 'opponentWon' → 'playerWon' for the host.
     const guestViewState = { ...makeState(), gameStatus: 'opponentWon' as const };
     await act(async () => {
-      conn._emit('data', { type: 'GAME_STATE', gameState: guestViewState });
+      socketState.lastSocket._emit('game_state', { gameState: guestViewState });
     });
-    await waitForInit(); // let pendingSend effects settle
+    await waitForEffects();
 
-    // The host must have broadcast at least one GAME_STATE after winning.
-    const gameStateMsgs = conn.sent.filter(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (m: any) => m.type === 'GAME_STATE',
+    const broadcasts = socketState.lastSocket.emitted.filter(
+      (e: { event: string }) => e.event === 'game_state',
     );
-    expect(gameStateMsgs.length).toBeGreaterThan(0);
+    expect(broadcasts.length).toBeGreaterThan(0);
 
-    // The broadcasted state carries 'playerWon' so the guest's onMessage flips it
-    // to 'opponentWon' and shows the defeat screen.
+    // The broadcasted state must carry 'playerWon' (host's perspective) so the
+    // guest's onMessage flips it to 'opponentWon' and shows the defeat screen.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const lastMsg = gameStateMsgs[gameStateMsgs.length - 1] as any;
-    expect(lastMsg.gameState.gameStatus).toBe('playerWon');
+    const lastBroadcast = broadcasts[broadcasts.length - 1] as any;
+    expect(lastBroadcast.args[0].gameState.gameStatus).toBe('playerWon');
 
     unmount();
   });
 
-  it('does NOT send a game-over broadcast when the opponent wins (guest is responsible)', async () => {
-    // When the guest wins, the guest is the one whose state transitions to
-    // 'playerWon' and triggers the broadcast.  The host's state becomes
-    // 'opponentWon' — it must NOT re-broadcast (that would create an echo).
+  it('does NOT broadcast when the guest wins (guest is responsible for that send)', async () => {
+    // When the guest wins, the guest's state transitions to 'playerWon' and the
+    // guest sends the final GAME_STATE. The host's state becomes 'opponentWon'
+    // and must NOT re-broadcast (that would create an echo loop).
 
-    const conn = makeConn();
     const { unmount } = render(
       <GameManager onExit={() => {}} multiplayerConfig={realtimeHostConfig} />,
     );
-    await waitForInit();
+    await waitForEffects();
+    await establishConnection();
 
-    await act(async () => { peerState.lastPeer._emit('open'); });
-    await act(async () => { peerState.lastPeer._emit('connection', conn); });
-    await waitForInit();
+    socketState.lastSocket.emitted = [];
 
-    conn.sent = [];
-
-    // Simulate the guest sending a GAME_STATE where, from the guest's
-    // perspective, they themselves won → gameStatus: 'playerWon'.
-    // After flipGameStatePerspective the host sees gameStatus: 'opponentWon'.
+    // Guest sends GAME_STATE saying they won. After flip: host sees 'opponentWon'.
     const guestViewState = { ...makeState(), gameStatus: 'playerWon' as const };
     await act(async () => {
-      conn._emit('data', { type: 'GAME_STATE', gameState: guestViewState });
+      socketState.lastSocket._emit('game_state', { gameState: guestViewState });
     });
-    await waitForInit();
+    await waitForEffects();
 
-    // Host must NOT re-broadcast in this case.
-    const gameStateMsgs = conn.sent.filter(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (m: any) => m.type === 'GAME_STATE',
+    const broadcasts = socketState.lastSocket.emitted.filter(
+      (e: { event: string }) => e.event === 'game_state',
     );
-    expect(gameStateMsgs.length).toBe(0);
+    expect(broadcasts.length).toBe(0);
 
     unmount();
   });

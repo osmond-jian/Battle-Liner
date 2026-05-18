@@ -4,6 +4,9 @@ import { generateRoomCode } from '../utils/roomCode';
 import type { MultiplayerConfig } from '../types/multiplayer';
 
 type LobbyView = 'main' | 'host' | 'join';
+type ServerStatus = 'checking' | 'warming' | 'ready' | 'error';
+
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:3001';
 
 interface MultiplayerLobbyProps {
   onStartGame: (config: MultiplayerConfig) => void;
@@ -15,6 +18,7 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
   const [usernameInput, setUsernameInput] = useState(profile.username);
   const [editingUsername, setEditingUsername] = useState(false);
   const [view, setView] = useState<LobbyView>('main');
+  const [serverStatus, setServerStatus] = useState<ServerStatus>('checking');
 
   // Host view
   const [opponentNameInput, setOpponentNameInput] = useState('');
@@ -36,6 +40,18 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
   // Join view
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joinError, setJoinError] = useState('');
+
+  // ── Server warm-up ping ──────────────────────────────────────────────────
+  // Fires immediately on mount so the server starts waking up before the user
+  // clicks Host/Join. After 3 s with no response we show a warming banner.
+  useEffect(() => {
+    const warmingTimer = setTimeout(() => setServerStatus('warming'), 3000);
+    fetch(`${SERVER_URL}/health`)
+      .then(r => (r.ok ? r.json() : Promise.reject('bad status')))
+      .then(() => { clearTimeout(warmingTimer); setServerStatus('ready'); })
+      .catch(() => { clearTimeout(warmingTimer); setServerStatus('error'); });
+    return () => clearTimeout(warmingTimer);
+  }, []);
 
   // ── Profile editing ──────────────────────────────────────────────────────
   const handleSaveUsername = () => {
@@ -143,6 +159,18 @@ export function MultiplayerLobby({ onStartGame, onBack }: MultiplayerLobbyProps)
             </div>
           )}
         </div>
+
+        {/* Server status banner */}
+        {serverStatus === 'warming' && (
+          <div className="bg-amber-900/30 border border-amber-700/50 rounded-xl px-4 py-3 mb-4 text-xs text-amber-300 text-center">
+            Server is starting up — this may take ~1 minute on first use.
+          </div>
+        )}
+        {serverStatus === 'error' && (
+          <div className="bg-red-900/30 border border-red-700/50 rounded-xl px-4 py-3 mb-4 text-xs text-red-300 text-center">
+            Could not reach server. Check your connection and try again.
+          </div>
+        )}
 
         {/* Main view */}
         {view === 'main' && (
