@@ -8,6 +8,7 @@
     "dev:server": "npm --prefix server run dev",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "build": "vite build",
+    "build:all": "vite build && npm install --include=dev --prefix server && npm run build --prefix server",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
