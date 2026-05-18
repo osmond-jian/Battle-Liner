@@ -23,35 +23,6 @@ import { TraitorPlaceModal } from './TraitorPlaceModal';
 import { VictoryModal } from './VictoryModal';
 import { MAX_RETRIES } from '../hooks/usePeer';
 
-function errorSummary(err: string | null): string {
-  const type = err?.split(':')[0] ?? '';
-  switch (type) {
-    case 'peer-unavailable': return 'Room not found';
-    case 'webrtc':           return 'WebRTC negotiation failed';
-    case 'network':          return 'Network error';
-    case 'server-error':     return 'Signaling server error';
-    case 'socket-error':
-    case 'socket-closed':    return 'Lost connection to signaling server';
-    case 'negotiation-failed': return 'ICE negotiation failed';
-    case 'browser-incompatible': return 'Browser not supported';
-    default:                 return 'Connection error';
-  }
-}
-
-function errorHint(err: string | null): string {
-  const type = err?.split(':')[0] ?? '';
-  switch (type) {
-    case 'peer-unavailable': return 'The room code may be wrong, or the host has not started the game yet.';
-    case 'webrtc':           return 'This is usually caused by strict NAT or a firewall. Try a different network or disable a VPN.';
-    case 'network':          return 'Check your internet connection and try again.';
-    case 'server-error':     return 'The PeerJS signaling server returned an error. Try again in a moment.';
-    case 'socket-error':
-    case 'socket-closed':    return 'The connection to the signaling server was interrupted.';
-    case 'negotiation-failed': return 'Could not establish a direct or relayed path. Try a different network or disable a VPN.';
-    case 'browser-incompatible': return 'WebRTC is not available in this browser. Try Chrome or Firefox.';
-    default:                 return 'An unexpected connection error occurred.';
-  }
-}
 
 export function GameBoard() {
   const {
@@ -622,17 +593,30 @@ export function GameBoard() {
 
             {peerStatus === 'waiting' && (
               <div>
-                <p className="text-amber-400 font-bold text-sm mb-2">
-                  {hadGuest ? 'Opponent disconnected — waiting to reconnect…' : 'Waiting for opponent…'}
-                </p>
-                <p className="text-xs text-slate-400 mb-2">
-                  {hadGuest
-                    ? 'Ask them to re-enter the room code:'
-                    : <>Share this room code with{' '}<span className="text-white font-semibold">{opponentName}</span>:</>}
-                </p>
-                <p className="font-mono text-3xl text-amber-400 tracking-[0.3em] font-black select-all">
-                  {multiplayerConfig!.roomCode}
-                </p>
+                {isHost ? (
+                  <>
+                    <p className="text-amber-400 font-bold text-sm mb-2">
+                      {hadGuest ? 'Opponent disconnected — waiting to reconnect…' : 'Waiting for opponent…'}
+                    </p>
+                    <p className="text-xs text-slate-400 mb-2">
+                      {hadGuest
+                        ? 'Ask them to re-enter the room code:'
+                        : <>Share this room code with{' '}<span className="text-white font-semibold">{opponentName}</span>:</>}
+                    </p>
+                    <p className="font-mono text-3xl text-amber-400 tracking-[0.3em] font-black select-all">
+                      {multiplayerConfig!.roomCode}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-amber-400 font-bold text-sm mb-2">
+                      Host disconnected — waiting to reconnect…
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      The host's connection was interrupted. They should reconnect automatically.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -673,17 +657,15 @@ export function GameBoard() {
 
             {peerStatus === 'error' && (
               <div>
-                <p className="text-red-400 text-sm font-semibold">
-                  {errorSummary(peerLastError)}
-                </p>
+                <p className="text-red-400 text-sm font-semibold">Could not reach server</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  {errorHint(peerLastError)}
+                  Retrying automatically — check your internet connection.
                 </p>
               </div>
             )}
 
             {/* Details toggle — shown for states that have diagnostic info */}
-            {(peerStatus === 'reconnecting' || peerStatus === 'disconnected' || peerStatus === 'error') && peerLastError && (
+            {(peerStatus === 'connecting' || peerStatus === 'reconnecting' || peerStatus === 'disconnected' || peerStatus === 'error') && peerLastError && (
               <div className="text-left">
                 <button
                   onClick={() => setShowConnDetails(v => !v)}

@@ -39,8 +39,7 @@ interface UsePeerReturn {
 
 export const MAX_RETRIES = 10;
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL
-  ?? (import.meta.env.PROD ? window.location.origin : 'http://localhost:3001');
+import { SERVER_URL } from '../utils/serverUrl';
 
 export function usePeer({
   isHost,
@@ -156,6 +155,8 @@ export function usePeer({
         roomRetryTimerRef.current = null;
       }
       roomRetryCountRef.current = 0;
+      setLastError(null);
+      setStatus('connecting');
       registerWithRoom(socket);
     });
 
@@ -245,7 +246,11 @@ export function usePeer({
     socket.on('connect_error', (err: Error) => {
       if (destroyedRef.current) return;
       setLastError(err.message);
-      // Socket.io keeps retrying; leave status as-is so the overlay message persists.
+      // Only surface as 'error' when we haven't connected yet or we're already reconnecting.
+      // 'waiting' and 'connected' are stable states that shouldn't be clobbered by a transient error.
+      setStatus(prev =>
+        prev === 'connecting' || prev === 'reconnecting' ? 'error' : prev
+      );
     });
 
     socket.on('server_shutdown', () => {

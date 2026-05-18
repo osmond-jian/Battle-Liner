@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { getOrCreateProfile, saveProfile } from '../utils/playerProfile';
 import { generateRoomCode } from '../utils/roomCode';
+import { SERVER_URL } from '../utils/serverUrl';
 import type { MultiplayerConfig } from '../types/multiplayer';
 
 type LobbyView = 'main' | 'host' | 'join';
 type ServerStatus = 'checking' | 'warming' | 'ready' | 'error';
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:3001';
 
 interface MultiplayerLobbyProps {
   onStartGame: (config: MultiplayerConfig) => void;
