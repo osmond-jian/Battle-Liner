@@ -76,7 +76,11 @@ export function reducer(state: GameState, action: GameAction): GameState {
         else newState.lastPlayerMove = moveRecord;
       }
 
-      applyFlagWinnerCheck(newState, flagIndex);
+      // Re-check all unclaimed flags: playing a card to any flag changes the
+      // available pool and may make previously uncertain flags deterministic.
+      for (let i = 0; i < newState.flags.length; i++) {
+        applyFlagWinnerCheck(newState, i);
+      }
       return newState;
     }
 
@@ -224,7 +228,9 @@ export function reducer(state: GameState, action: GameAction): GameState {
       targetFlag.formation.player.cards.push(card!);
       newState.pendingTraitor = null;
       newState.pendingTactics = null;
-      applyFlagWinnerCheck(newState, action.toFlagIndex);
+      for (let i = 0; i < newState.flags.length; i++) {
+        applyFlagWinnerCheck(newState, i);
+      }
       return newState;
     }
     case 'RESET_GAME': {

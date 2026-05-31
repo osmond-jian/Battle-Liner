@@ -203,6 +203,18 @@ export function GameBoard() {
       {/* ── Main play area ─────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-h-0 px-2 sm:px-4 py-2 gap-2">
 
+        {/* P2P: waiting for opponent's move — shown above their cards */}
+        {isRealtimeMP && peerStatus === 'connected' && currentTurn === 'opponent' && (
+          <div className="shrink-0 flex justify-center">
+            <div className="bg-slate-900/90 border border-slate-700 rounded-xl px-5 py-2 text-center pointer-events-none">
+              <p className="text-sm text-slate-400">
+                Waiting for{' '}
+                <span className="text-amber-400 font-semibold">{opponentName}</span> to play…
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Opponent row */}
         <div className="shrink-0 flex items-center gap-2 sm:gap-3">
           <div className="hidden sm:block">
@@ -687,18 +699,6 @@ export function GameBoard() {
             >
               Back to Menu
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── P2P: waiting for opponent's move (game in progress) ───── */}
-      {isRealtimeMP && peerStatus === 'connected' && currentTurn === 'opponent' && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          <div className="bg-slate-900/90 border border-slate-700 rounded-xl px-5 py-2.5 text-center">
-            <p className="text-sm text-slate-400">
-              Waiting for{' '}
-              <span className="text-amber-400 font-semibold">{opponentName}</span> to play…
-            </p>
           </div>
         </div>
       )}

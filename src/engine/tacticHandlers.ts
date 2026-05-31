@@ -130,6 +130,8 @@ export function handleSetWildCard(
   clearPending(newState);
   newState.pendingTactics = null;
 
-  applyFlagWinnerCheck(newState, pending.flagIndex);
+  for (let i = 0; i < newState.flags.length; i++) {
+    applyFlagWinnerCheck(newState, i);
+  }
   return newState;
 }
