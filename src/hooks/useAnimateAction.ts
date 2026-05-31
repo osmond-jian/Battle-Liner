@@ -19,7 +19,7 @@ export interface AnimationState {
  *
  * For DRAW_CARD, we target just after the current last card so the fly animation
  * lands exactly where the card will appear. After dispatch, Framer Motion's
- * `layout` prop on each hand card animates the whole row to its newly centered
+ * `layout` prop on each hand card animates the whole row to its newly centred
  * positions.
  */
 function computeDrawTarget(

@@ -43,7 +43,7 @@ export function VictoryModal({
     ? 'Your forces have claimed the battle line!'
     : isDraw
     ? 'The battle line holds — neither side could break through.'
-    : 'The enemy has broken through your defenses.';
+    : 'The enemy has broken through your defences.';
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-80">
