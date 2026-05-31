@@ -241,7 +241,7 @@ export function GameBoard() {
         {/* Flags + Deck side panel — deck is always visible on the right edge */}
         <div className="flex-1 flex min-h-0 gap-1 sm:gap-2">
 
-          {/* Flags — scrollable in both directions; centered when space allows */}
+          {/* Flags — scrollable in both directions; centred when space allows */}
           <div className="flex-1 overflow-auto flags-scroll min-h-0">
             <div className="flex min-h-full items-center justify-center">
               <div className="flex gap-0.5 px-2 py-1">
@@ -359,7 +359,7 @@ export function GameBoard() {
           <div className="hidden sm:block">
             <ProfileCard name={playerName} />
           </div>
-          {/* Mobile: horizontal scroll; desktop: wrapping centered row */}
+          {/* Mobile: horizontal scroll; desktop: wrapping centred row */}
           <div id="hand" className="flex-1 min-w-0 flex gap-1.5 overflow-x-auto sm:overflow-x-visible sm:flex-wrap sm:justify-center pb-0.5 sm:pb-0">
             {gameState.playerHand.map(card => (
               <motion.div key={card.id} layout transition={{ layout: { duration: 0.25, ease: 'easeOut' } }}
@@ -570,7 +570,7 @@ export function GameBoard() {
               ? '🏆 Victory — Your forces claimed the battle line!'
               : gameState.gameStatus === 'draw'
               ? '🤝 Draw — The battle line holds. Neither side broke through.'
-              : '💀 Defeated — The enemy broke through your defenses.'}
+              : '💀 Defeated — The enemy broke through your defences.'}
           </span>
           <div className="flex gap-2 shrink-0">
             {!isRealtimeMP && (

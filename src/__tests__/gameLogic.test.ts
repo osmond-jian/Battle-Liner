@@ -198,35 +198,33 @@ describe('checkWinner', () => {
 
   it('player wins early when opponent literally cannot beat the completed formation', () => {
     // Player complete: phalanx 9-9-9 = 27000. Opponent has one card [1r].
-    // Available pool is empty → opponent cannot complete formation → no combo beats it.
+    // Empty pool → opponent cannot complete formation.
     const flag = makeFlag(
       [troop('red', 9), troop('blue', 9), troop('green', 9)],
       [troop('red', 1)],
     );
-    expect(checkWinner(flag, [], [], [])).toBe('player');
+    expect(checkWinner(flag, [])).toBe('player');
   });
 
-  it('no early win when player hand contains a card that could beat the opponent', () => {
+  it('no early win when pool contains a card that lets the player beat the opponent', () => {
     // Opponent complete: phalanx of 6s = 18000.
-    // Player has red-2, red-3 on flag. If red-4 is in their hand → wedge (9×10000=90000) > 18000.
+    // Player has red-2, red-3 on flag. red-4 is in pool → wedge (9×10000=90000) > 18000.
     const flag = makeFlag(
       [troop('red', 2), troop('red', 3)],
       [troop('red', 6), troop('blue', 6), troop('green', 6)],
     );
-    const playerHand = [troop('red', 4)];
     // With red-4 available, player CAN form a wedge → opponent should NOT get early win.
-    expect(checkWinner(flag, [], [], playerHand)).toBeNull();
+    expect(checkWinner(flag, [troop('red', 4)])).toBeNull();
   });
 
-  it('opponent wins early when player has only unwinnable cards available', () => {
+  it('opponent wins early when only unwinnable cards are available', () => {
     // Opponent phalanx of 6s (18000). Player has [2r, 3r] on flag.
     // Only blue-5 available: [2r,3r,5b] = not straight (2,3,5), not flush → sum=10 < 18000.
     const flag = makeFlag(
       [troop('red', 2), troop('red', 3)],
       [troop('red', 6), troop('blue', 6), troop('green', 6)],
     );
-    const playerHand = [troop('blue', 5)];
-    expect(checkWinner(flag, [], [], playerHand)).toBe('opponent');
+    expect(checkWinner(flag, [troop('blue', 5)])).toBe('opponent');
   });
 
   // ── Fog modifier tests ──────────────────────────────────────────────────────
@@ -258,50 +256,44 @@ describe('checkWinner', () => {
 
   it('fog: opponent [1,1,1] cannot claim early when player has [4] and troops available', () => {
     // Opponent total = 3, complete. Player has [4] (incomplete, 1/3).
-    // Player hand has troops → player can reach at least 4+1+1=6 > 3.
+    // Pool has troops → player can reach at least 4+2+3=9 > 3.
     const flag = makeFlag(
       [troop('red', 4)],
       [troop('red', 1), troop('blue', 1), troop('green', 1)],
       ['fog'],
     );
-    const playerHand = [troop('blue', 2), troop('green', 3)];
-    // checkWinner(flag, deck, opponentHand, playerHand)
-    expect(checkWinner(flag, [], [], playerHand)).toBeNull();
+    expect(checkWinner(flag, [troop('blue', 2), troop('green', 3)])).toBeNull();
   });
 
   it('fog: opponent [1,1,1] CAN claim early when player has [4] but zero troops available', () => {
     // Player has a 4 on flag but no more cards to complete their formation.
-    // Incomplete formation → opponent's complete [1,1,1] (total 3) is awarded.
     const flag = makeFlag(
       [troop('red', 4)],
       [troop('red', 1), troop('blue', 1), troop('green', 1)],
       ['fog'],
     );
-    expect(checkWinner(flag, [], [], [])).toBe('opponent');
+    expect(checkWinner(flag, [])).toBe('opponent');
   });
 
   it('fog: player with complete [4,5,6] claims early when opponent [1] cannot reach total 15', () => {
-    // Player total = 15, complete. Opponent has [1] (needs 2 more).
-    // Best opponent can reach: 1 + 10 + 10 = 21 > 15 → cannot claim yet.
-    // But with only low-value cards available (max 3), opponent max = 1+3+2 = 6 < 15 → player claims.
+    // Player total = 15, complete. Opponent has [1], pool only has low cards.
+    // Best opponent can reach: 1+3+2=6 < 15 → player claims.
     const flag = makeFlag(
       [troop('red', 4), troop('blue', 5), troop('green', 6)],
       [troop('red', 1)],
       ['fog'],
     );
-    const opponentPool = [troop('blue', 2), troop('green', 3)]; // max total from pool: 2+3=5; 1+5=6 < 15
-    expect(checkWinner(flag, [], opponentPool, [])).toBe('player');
+    expect(checkWinner(flag, [troop('blue', 2), troop('green', 3)])).toBe('player');
   });
 
   it('fog: player with complete [4,5,6] cannot claim early when opponent [1] could reach higher total', () => {
-    // Player total = 15. Opponent has [1] and could draw two 8s: 1+8+8 = 17 > 15.
+    // Player total = 15. Opponent has [1], pool has two 8s: 1+8+8=17 > 15.
     const flag = makeFlag(
       [troop('red', 4), troop('blue', 5), troop('green', 6)],
       [troop('red', 1)],
       ['fog'],
     );
-    const opponentPool = [troop('blue', 8), troop('green', 8)];
-    expect(checkWinner(flag, [], opponentPool, [])).toBeNull();
+    expect(checkWinner(flag, [troop('blue', 8), troop('green', 8)])).toBeNull();
   });
 
   it('fog: neither side can claim while both formations are incomplete', () => {
@@ -310,7 +302,7 @@ describe('checkWinner', () => {
       [troop('blue', 7)],
       ['fog'],
     );
-    expect(checkWinner(flag, [], [], [])).toBeNull();
+    expect(checkWinner(flag, [])).toBeNull();
   });
 
   // ── Mud modifier tests ──────────────────────────────────────────────────────

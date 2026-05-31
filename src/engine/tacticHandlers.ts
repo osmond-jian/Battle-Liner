@@ -7,7 +7,7 @@
  */
 
 import type { Card, GameState } from '../types/game';
-import { checkWinner, checkGameOver } from '../utils/gameLogic';
+import { checkWinner, checkGameOver, buildPublicPool } from '../utils/gameLogic';
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -17,7 +17,7 @@ import { checkWinner, checkGameOver } from '../utils/gameLogic';
  */
 export function applyFlagWinnerCheck(newState: GameState, flagIndex: number): void {
   const flag = newState.flags[flagIndex];
-  const winner = checkWinner(flag, newState.deck, newState.opponentHand, newState.playerHand);
+  const winner = checkWinner(flag, buildPublicPool(newState.flags));
   if (winner) flag.winner = winner;
   const gameWinner = checkGameOver(newState.flags);
   if (gameWinner) newState.gameStatus = gameWinner === 'player' ? 'playerWon' : 'opponentWon';

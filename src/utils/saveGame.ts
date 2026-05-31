@@ -73,6 +73,8 @@ interface SaveSlot {
   }[];
   playerTacticsPlayed: number;
   opponentTacticsPlayed: number;
+  playerPlayedTactics: string[];
+  opponentPlayedTactics: string[];
   gameStatus: string;
   deserterActive: boolean;
   traitorActive: boolean;
@@ -131,6 +133,8 @@ export function saveGame(gameState: GameState, turnPhase: TurnPhase): void {
     })),
     playerTacticsPlayed: gameState.playerTacticsPlayed,
     opponentTacticsPlayed: gameState.opponentTacticsPlayed,
+    playerPlayedTactics: gameState.playerPlayedTactics.map(enc),
+    opponentPlayedTactics: gameState.opponentPlayedTactics.map(enc),
     gameStatus: gameState.gameStatus,
     deserterActive: gameState.deserterActive,
     traitorActive: gameState.traitorActive,
@@ -185,6 +189,8 @@ export function loadGame(): LoadedSave | null {
       })),
       playerTacticsPlayed: slot.playerTacticsPlayed,
       opponentTacticsPlayed: slot.opponentTacticsPlayed,
+      playerPlayedTactics: slot.playerPlayedTactics?.map(dec) ?? [],
+      opponentPlayedTactics: slot.opponentPlayedTactics?.map(dec) ?? [],
       gameStatus: slot.gameStatus as GameState['gameStatus'],
       selectedCard: null,
       selectedFlag: null,
